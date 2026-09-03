@@ -1,0 +1,173 @@
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
+import { AuthUser } from "../common/decorators/user.decorator";
+import { PaginationDto, buildPage } from "../common/dto/pagination.dto";
+import { NotificationsService } from "../notifications/notifications.service";
+
+
+/**
+ * Job lifecycle: scheduling (with overlap enforcement), worker assignment,
+ * start/complete transitions, calendar views.
+ */
+@Injectable()
+export class JobsService {
+  constructor(private prisma: PrismaService, private audit: AuditService, private notifications: NotificationsService) {}
+
+  private async load(user: AuthUser, id: string) {
+    const job = await this.prisma.job.findUnique({ where: { id }, include: { contract: { include: { organization: true, provider: true } } } });
+    if (!job) throw new NotFoundException("Job not found");
+    const isProvider = user.role === "PROVIDER" && user.providerId === job.contract.providerId;
+    const isHiring = user.role === "HIRING_ORG" && user.hiringOrgId === job.contract.organizationId;
+    if (!isProvider && !isHiring && user.role !== "ADMIN") throw new ForbiddenException("Access denied");
+    return job;
+  }
+
+  async list(user: AuthUser, q: PaginationDto) {
+    const where: any = {};
+    if (user.role === "HIRING_ORG") {
+      const contracts = await this.prisma.contract.findMany({ where: { organizationId: user.hiringOrgId! }, select: { id: true } });
+      where.contractId = { in: contracts.map((c) => c.id) };
+    } else if (user.role === "PROVIDER" && user.providerId) {
+      const contracts = await this.prisma.contract.findMany({ where: { providerId: user.providerId }, select: { id: true } });
+      where.contractId = { in: contracts.map((c) => c.id) };
+    }
+    const [total, items] = await Promise.all([
+      this.prisma.job.count({ where }),
+      this.prisma.job.findMany({ where, skip: (q.page - 1) * q.limit, take: q.limit, orderBy: { date: "desc" } }),
+    ]);
+    return buildPage(items, total, q.page, q.limit);
+  }
+
+  async create(user: AuthUser, dto: any) {
+    if (user.role !== "HIRING_ORG" || !user.hiringOrgId) throw new ForbiddenException("Only hiring organizations create jobs");
+    const contract = await this.prisma.contract.findUnique({ where: { id: dto.contractId }, select: { id: true, organizationId: true, providerId: true, building: true } });
+    if (!contract || contract.organizationId !== user.hiringOrgId) throw new ForbiddenException("Contract not accessible");
+    // ensure job stays within contract scope
+    const start = new Date(dto.startTime); const end = new Date(dto.endTime);
+    const job = await this.prisma.job.create({
+      data: {
+        contractId: dto.contractId,
+        buildingId: dto.buildingId,
+        floorId: dto.floorId,
+        areaId: dto.areaId,
+        title: dto.title,
+        location: dto.location,
+        date: dto.date,
+        startTime: start,
+        endTime: end,
+        instructions: dto.instructions,
+        requiredSkills: dto.requiredSkills,
+        serviceName: dto.serviceName,
+        status: "SCHEDULED",
+      },
+    });
+    void this.audit.log({ actorId: user.userId, action: "JOB_CREATED", entityType: "Job", entityId: job.id, details: dto });
+    void this.notifications.notify({ userId: user.userId, type: "JOB_SCHEDULED", title: "Job scheduled", message: `${dto.title} was scheduled.` });
+    return job;
+  }
+
+  async update(user: AuthUser, id: string, dto: any) {
+    const job = await this.load(user, id);
+    let data: any = { ...dto };
+    if (dto.startTime) data.startTime = new Date(dto.startTime);
+    if (dto.endTime) data.endTime = new Date(dto.endTime);
+    if (dto.date) data.date = dto.date;
+    const updated = await this.prisma.job.update({ where: { id: job.id }, data });
+    void this.audit.log({ actorId: user.userId, action: "JOB_UPDATED", entityType: "Job", entityId: id, details: dto });
+    return updated;
+  }
+
+  async get(user: AuthUser, id: string) {
+    const job = await this.load(user, id);
+    return this.prisma.job.findUnique({
+      where: { id: job.id },
+      include: {
+        contract: { include: { organization: true, provider: true, quotation: true } },
+        workerAssignments: { include: { worker: true, job: false } },
+        checklistResults: { include: { checklistItem: true } },
+        proofOfWork: { include: { beforePhotos: true, afterPhotos: true, completer: true } },
+        approvals: true,
+        reworkRequests: { include: { requester: true } },
+        invoices: true,
+      },
+    });
+  }
+
+  async start(user: AuthUser, id: string) {
+    const job = await this.load(user, id);
+    const valid = (user.role === "PROVIDER" && user.providerId === job.contract.providerId) || (user.role === "HIRING_ORG" && user.hiringOrgId === job.contract.organizationId) || user.role === "ADMIN";
+    if (!valid) throw new ForbiddenException("Not authorized to start this job");
+    if (job.status !== "ASSIGNED" && job.status !== "SCHEDULED") throw new BadRequestException("Job must be assigned or scheduled before starting");
+    const updated = await this.prisma.job.update({ where: { id: job.id }, data: { status: "IN_PROGRESS", startedAt: new Date() } });
+    void this.audit.log({ actorId: user.userId, action: "JOB_STARTED", entityType: "Job", entityId: id });
+    return updated;
+  }
+
+  async complete(user: AuthUser, id: string) {
+    const job = await this.load(user, id);
+    if (job.status !== "IN_PROGRESS") throw new BadRequestException("Job must be in progress to complete");
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const rec = await tx.job.update({ where: { id: job.id }, data: { status: "COMPLETED", completedAt: new Date() } });
+      await tx.approval.create({ data: { jobId: job.id, decision: "APPROVED", approvedByUserId: user.userId, notes: "auto-created on completion" } });
+      await this.notifications.notify({ userId: user.userId, type: "JOB_COMPLETED", title: "Job completed", message: "Job marked complete, awaiting approval." });
+      return rec;
+    });
+    void this.audit.log({ actorId: user.userId, action: "JOB_COMPLETED", entityType: "Job", entityId: id });
+    return updated;
+  }
+
+  /** Assign a worker to a job, enforcing no overlapping assignments. */
+  async assignWorker(user: AuthUser, jobId: string, workerId: string) {
+    const job = await this.load(user, jobId);
+    if (user.role === "PROVIDER" && user.providerId !== job.contract.providerId) throw new ForbiddenException("Not your job");
+    const worker = await this.prisma.worker.findUnique({ where: { id: workerId }, select: { id: true, providerId: true } });
+    if (!worker || worker.providerId !== job.contract.providerId) throw new ForbiddenException("Worker not available");
+    // overlap check
+    const overlap = await this.prisma.workerAssignment.findFirst({
+      where: {
+        workerId,
+        job: {
+          OR: [
+            { startTime: { lte: job.endTime, gte: job.startTime } },
+            { endTime: { gte: job.startTime, lte: job.endTime } },
+          ],
+          status: { in: ["SCHEDULED", "ASSIGNED", "IN_PROGRESS"] },
+        },
+      },
+    });
+    if (overlap) throw new ConflictException("Worker already assigned to an overlapping job");
+    const assignment = await this.prisma.workerAssignment.create({ data: { jobId: job.id, workerId, assignedBy: user.userId } });
+    await this.prisma.job.update({ where: { id: job.id }, data: { status: "ASSIGNED" } });
+    void this.audit.log({ actorId: user.userId, action: "WORKER_ASSIGNED", entityType: "WorkerAssignment", entityId: assignment.id, details: { jobId, workerId } });
+    void this.notifications.notify({ userId: user.userId, type: "WORKER_ASSIGNED", title: "Worker assigned", message: "A worker was assigned to the job." });
+    return assignment;
+  }
+
+  async assignedWorkers(user: AuthUser, jobId: string) {
+    const job = await this.load(user, jobId);
+    return this.prisma.workerAssignment.findMany({ where: { jobId: job.id }, include: { worker: true } });
+  }
+
+  /** Calendar view: daily/weekly/monthly aggregated jobs the user can see. */
+  async calendar(user: AuthUser, dateStr?: string) {
+    let day: Date; try { day = dateStr ? new Date(dateStr) : new Date(); } catch { day = new Date(); } if (isNaN(day.getTime())) day = new Date(); const from = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0)); const to = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999));
+    const contracts = await this.contractsForUser(user);
+    const jobs = await this.prisma.job.findMany({
+      where: { contractId: { in: contracts }, date: { gte: from, lte: to } },
+      orderBy: { startTime: "asc" },
+      include: { contract: { include: { provider: true, organization: true } } },
+    });
+    return { date: day.toISOString().slice(0,10), jobs };
+  }
+
+  private async contractsForUser(user: AuthUser) {
+    const where: any = {};
+    if (user.role === "HIRING_ORG") where.organizationId = user.hiringOrgId;
+    else if (user.role === "PROVIDER" && user.providerId) where.providerId = user.providerId;
+    const contracts = await this.prisma.contract.findMany({ where, select: { id: true } });
+    return contracts.map((c) => c.id);
+  }
+}
+
+

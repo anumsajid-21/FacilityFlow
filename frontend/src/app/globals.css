@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sand: #F3EFE7;
+  --ivory: #FFFDF8;
+  --pine: #173F38;
+  --pine-light: #1F534A;
+  --pine-darker: #0F2B26;
+  --terracotta: #B9553D;
+  --terracotta-hover: #96432F;
+  --terracotta-soft: #F6E3DC;
+  --brass: #C9A66B;
+  --brass-soft: #F2E8D5;
+  --charcoal: #172522;
+  --sage: #66736D;
+  --border: #E5E0D5;
+  --input: #DCD6C8;
+  --ring: #173F38;
+  --destructive: #A93226;
+  --muted: #EDE8DD;
+  --accent: #F2E8D5;
+}
+
+body {
+  background-color: var(--sand);
+  color: var(--charcoal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Warm scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #DCD6C8; border-radius: 8px; border: 2px solid #F3EFE7; }
+::-webkit-scrollbar-thumb:hover { background: #C9A66B; }
+
+/* Skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  background-color: #EAE4D8;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,253,248,0.7), transparent);
+  animation: shimmer 1.6s infinite;
+}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* Subtle entrance for page sections */
+.section-enter {
+  animation: fade-in 0.25s ease-out;
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

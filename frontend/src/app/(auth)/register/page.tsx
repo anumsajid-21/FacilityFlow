@@ -1,0 +1,118 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import Link from "next/link";
+import { ArrowRight, Building2, Wrench } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input, Field } from "@/components/ui/kit";
+import { authService } from "@/services/api";
+import { useAuthStore } from "@/store/auth";
+import { cn } from "@/lib/utils";
+
+const formSchema = z.object({
+  name: z.string().min(2, "Name is required"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  companyName: z.string().min(2, "Company/Organization name is required"),
+  role: z.enum(["HIRING_ORG", "PROVIDER"]),
+});
+
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const [error, setError] = useState("");
+  
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      role: "HIRING_ORG",
+    }
+  });
+
+  const selectedRole = watch("role");
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      setError("");
+      const res = await authService.register(values);
+      setAuth(res.user, res.access_token);
+      router.replace("/dashboard");
+    } catch (err: any) {
+      setError(err.response?.data?.message || "An error occurred during registration");
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen bg-sand">
+      <div className="hidden w-1/2 flex-col justify-between bg-pine p-12 lg:flex">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brass text-lg font-bold text-pine-darker">FF</div>
+          <span className="text-xl font-bold text-ivory">FacilityFlow</span>
+        </div>
+        <div>
+          <h2 className="text-3xl font-bold leading-tight text-ivory">Streamline your<br />facility operations.</h2>
+          <p className="mt-4 max-w-md text-base text-sand/70">Whether you manage properties or provide services, FacilityFlow helps you collaborate and deliver.</p>
+        </div>
+        <p className="text-xs text-sand/50">© {new Date().getFullYear()} FacilityFlow</p>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 lg:hidden">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-pine text-sm font-bold text-brass">FF</div>
+              <span className="text-lg font-bold text-pine">FacilityFlow</span>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-charcoal">Create your account</h1>
+          <p className="mt-1 text-sm text-sage">Start managing facility services in minutes.</p>
+          {error && <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-charcoal">I want to…</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { key: "HIRING_ORG", label: "Hire a service", icon: Building2 },
+                  { key: "PROVIDER", label: "Provide services", icon: Wrench },
+                ] as const).map((opt) => {
+                  const active = selectedRole === opt.key;
+                  const Icon = opt.icon;
+                  return (
+                    <label key={opt.key} className={cn("flex cursor-pointer flex-col items-center gap-2 rounded-xl border p-4 text-center transition-colors", active ? "border-pine bg-pine/5 text-pine" : "border-border bg-ivory text-sage hover:border-brass hover:text-charcoal")}>
+                      <input type="radio" value={opt.key} {...register("role")} className="sr-only" />
+                      <Icon className={cn("h-5 w-5", active && "text-pine")} />
+                      <span className="text-sm font-medium">{opt.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <Field label="Full name" error={errors.name?.message}>
+              <Input placeholder="John Doe" {...register("name")} />
+            </Field>
+            <Field label="Company / Organization" error={errors.companyName?.message}>
+              <Input placeholder="Acme Corp" {...register("companyName")} />
+            </Field>
+            <Field label="Email" error={errors.email?.message}>
+              <Input placeholder="m@example.com" type="email" {...register("email")} />
+            </Field>
+            <Field label="Password" error={errors.password?.message}>
+              <Input type="password" placeholder="Min. 8 characters" {...register("password")} />
+            </Field>
+            <Button type="submit" className="w-full" disabled={isSubmitting} size="lg">
+              {isSubmitting ? "Creating account…" : "Create account"} {!isSubmitting && <ArrowRight className="h-4 w-4" />}
+            </Button>
+          </form>
+          <p className="mt-6 text-center text-sm text-sage">
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-pine hover:underline">Sign in</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
