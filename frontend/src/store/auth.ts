@@ -1,23 +1,30 @@
 import { create } from "zustand";
 import { api, authService } from "@/services/api";
 
-export type Role = "HIRING_ORG" | "PROVIDER" | "ADMIN";
+export type Role = "HIRING_ORG" | "PROVIDER" | "ADMIN" | "WORKER";
 
 export interface User {
   id: string;
   email: string;
   name: string;
   role: Role;
+  avatarUrl?: string | null;
+  phone?: string | null;
   hiringOrgId?: string | null;
   providerId?: string | null;
+  workerId?: string | null;
+  hiringOrg?: any;
+  provider?: any;
+  notificationPreference?: any;
 }
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  ready: boolean; // session restore finished
+  ready: boolean;
   setAuth: (user: User, token: string) => void;
+  updateUser: (partial: Partial<User>) => void;
   logout: () => void;
   restore: () => Promise<void>;
 }
@@ -31,6 +38,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.setItem("token", token);
     api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     set({ user, token, isAuthenticated: true, ready: true });
+  },
+  updateUser: (partial) => {
+    set((state) => ({
+      user: state.user ? { ...state.user, ...partial } : null,
+    }));
   },
   logout: () => {
     localStorage.removeItem("token");

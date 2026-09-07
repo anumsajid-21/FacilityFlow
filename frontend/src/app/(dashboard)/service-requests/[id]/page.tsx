@@ -38,7 +38,16 @@ export default function ServiceRequestDetailPage() {
     catch (e: any) { toast.error("Failed", e?.message); } finally { setBusy(""); }
   };
 
-  useEffect(() => { if (sr?.status === "OPEN" && isHiring) loadQuotes(); }, [sr?.status, isHiring]);
+  const [matches, setMatches] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (sr?.status === "OPEN" && isHiring) {
+      loadQuotes();
+      serviceRequestsApi.matches(id).then((res) => {
+        setMatches(res.providers || []);
+      }).catch(() => setMatches([]));
+    }
+  }, [sr?.status, isHiring]);
 
   if (sr === undefined) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Request not found.</div>;
   if (!sr) return <Loading />;
@@ -64,12 +73,35 @@ export default function ServiceRequestDetailPage() {
             </div>
             <p className="border-t border-border px-5 py-4 text-sm text-sage">{sr.description}</p>
           </Card>
-          {sr.quotations?.length > 0 && (
-            <Card className="p-5">
-              <p className="text-xs text-sage">Quotations received</p>
-              <p className="mt-1 text-2xl font-bold text-charcoal">{sr.quotations.length}</p>
-            </Card>
-          )}
+
+          <div className="space-y-4">
+            {sr.quotations?.length > 0 && (
+              <Card className="p-5">
+                <p className="text-xs text-sage">Quotations received</p>
+                <p className="mt-1 text-2xl font-bold text-charcoal">{sr.quotations.length}</p>
+              </Card>
+            )}
+
+            {isHiring && matches.length > 0 && (
+              <Card>
+                <div className="border-b border-border px-5 py-3 flex items-center justify-between">
+                  <h4 className="font-semibold text-charcoal text-sm">Suggested Providers</h4>
+                  <span className="rounded-full bg-pine/10 px-2 py-0.5 text-xs font-semibold text-pine">{matches.length} matches</span>
+                </div>
+                <div className="divide-y divide-border p-2">
+                  {matches.map((m: any) => (
+                    <div key={m.id || m.providerId} className="p-3 hover:bg-muted/30 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm text-charcoal">{m.name || m.providerName}</span>
+                        {m.matchScore && <span className="text-xs font-bold text-pine">{Math.round(m.matchScore * 100)}% match</span>}
+                      </div>
+                      {m.reason && <p className="mt-1 text-xs text-sage">{m.reason}</p>}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 

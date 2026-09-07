@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, NotFoundException, ParseUUIDPipe } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, NotFoundException, ParseUUIDPipe } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -36,6 +36,18 @@ export class WorkersController {
   @Roles("PROVIDER")
   get(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.ws.get(user, id);
+  }
+
+  @Post(":id/invite")
+  @Roles("PROVIDER")
+  invite(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string, @Body() dto: { email: string }) {
+    return this.ws.invite(user, id, dto);
+  }
+
+  @Patch(":id/status")
+  @Roles("PROVIDER")
+  setStatus(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string, @Body() dto: { status: string }) {
+    return this.ws.setStatus(user, id, dto.status);
   }
 
   @Patch(":id")

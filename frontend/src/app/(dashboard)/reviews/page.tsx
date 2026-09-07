@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
-import { reviewsApi, providersApi, jobsApi } from "@/services/api";
+import { reviewsApi, jobsApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, EmptyState, Loading, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
@@ -14,20 +14,34 @@ export default function ReviewsPage() {
   const [provider, setProvider] = useState<any>(null);
   const [reviews, setReviews] = useState<any[] | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
-  const [form, setForm] = useState({ jobId: "", providerId: "", quality: 5, timeliness: 5, professionalism: 5, value: 5, overallRating: 5, comments: "" });
+  const [myReviews, setMyReviews] = useState<any[]>([]);
+  const [form, setForm] = useState({ jobId: "", providerId: "", providerName: "", quality: 5, timeliness: 5, professionalism: 5, value: 5, overallRating: 5, comments: "" });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (isProvider && user?.providerId) {
-      reviewsApi.byProvider(user.providerId).then(setReviews).catch(() => setReviews([]));
+      reviewsApi.byProvider(user.providerId)
+        .then((r: any) => setReviews(Array.isArray(r) ? r : (r?.items ?? [])))
+        .catch(() => setReviews([]));
     } else {
-      providersApi.list().then((p) => setProvidersForForm(p.data)).catch(() => {});
-      jobsApi.list().then((p) => setJobs(p.data.filter((j: any) => j.status === "COMPLETED"))).catch(() => setJobs([]));
+      jobsApi.list().then((p) => {
+        const completed = p.data.filter((j: any) => j.status === "COMPLETED" || j.status === "AWAITING_APPROVAL");
+        setJobs(completed);
+      }).catch(() => setJobs([]));
+      reviewsApi.listMine().then((r) => setMyReviews(Array.isArray(r) ? r : [])).catch(() => setMyReviews([]));
       setReviews([]);
     }
   }, [isProvider, user]);
 
-  const setProvidersForForm = (list: any[]) => { setForm((f) => ({ ...f, providerId: f.providerId || list[0]?.id || "" })); };
+  // pick the provider automatically from the selected job's contract
+  const onJobChange = async (jobId: string) => {
+    setForm((f) => ({ ...f, jobId, providerId: f.jobId === jobId ? f.providerId : "" }));
+    if (!jobId || form.providerId) return;
+    try {
+      const j = await jobsApi.get(jobId);
+      if (j?.contract?.provider?.id) setForm((f) => ({ ...f, providerId: j.contract.provider.id, providerName: j.contract.provider.name }));
+    } catch { /* ignore */ }
+  };
 
   const avg = reviews && reviews.length ? (reviews.reduce((s, r) => s + Number(r.overallRating ?? 0), 0) / reviews.length).toFixed(1) : null;
 
@@ -77,7 +91,7 @@ export default function ReviewsPage() {
             <Field label="Completed job"><select className="h-10 w-full rounded-lg border border-input bg-ivory px-3 text-sm" value={form.jobId} onChange={(e) => setForm({ ...form, jobId: e.target.value })}>
               <option value="">Select…</option>{jobs.map((j) => <option key={j.id} value={j.id}>{j.title || j.serviceName || "Job"}</option>)}
             </select></Field>
-            <Field label="Provider"><Input value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })} placeholder="provider id" /></Field>
+            <Field label="Provider"><Input value={form.providerName || form.providerId || "—"} readOnly placeholder="Select a job" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(["quality", "timeliness", "professionalism", "value"] as const).map((k) => (
@@ -87,6 +101,38 @@ export default function ReviewsPage() {
           <Field label="Comments"><Textarea value={form.comments} onChange={(e) => setForm({ ...form, comments: e.target.value })} placeholder="Overall experience" /></Field>
           <div className="flex justify-end"><Button onClick={submit} loading={busy}>Submit review</Button></div>
         </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Reviews you submitted</h3></div>
+        {!myReviews ? <Loading /> : myReviews.length === 0 ? (
+          <div className="p-5 text-sm text-sage">No reviews yet. Approve a completed job, then submit a review above.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Hiring Organization</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Provider</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Rating</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Comment</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {myReviews.map((r) => (
+                  <tr key={r.id} className="hover:bg-muted/40">
+                    <td className="px-4 py-3 text-sm font-medium text-charcoal">{r.organization?.name ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm text-charcoal">{r.provider?.name ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-charcoal">{r.overallRating} / 5</td>
+                    <td className="px-4 py-3 max-w-xs text-sm text-sage">{r.comments || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-sage">{dateShort(r.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );

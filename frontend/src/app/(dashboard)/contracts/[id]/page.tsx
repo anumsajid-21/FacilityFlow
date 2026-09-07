@@ -1,53 +1,100 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Building2, HardHat } from "lucide-react";
-import { contractsApi } from "@/services/api";
-import { Card, PageHeader, Loading, StatusBadge } from "@/components/ui/kit";
+import { ArrowLeft, Building2, Calendar, DollarSign, HardHat, FileSignature } from "lucide-react";
+import { contractsApi, jobsApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth";
+import { Card, PageHeader, Loading, StatusBadge, Modal, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/store/toast";
 import { money, dateShort } from "@/lib/utils";
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [c, setC] = useState<any | null>(null);
+  const { user } = useAuthStore();
+  const [contract, setContract] = useState<any | null>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [openCreateJob, setOpenCreateJob] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [jobForm, setJobForm] = useState({ title: "", date: "", startTime: "", endTime: "", instructions: "" });
 
-  useEffect(() => { contractsApi.get(id).then(setC).catch(() => setC(undefined)); }, [id]);
-  if (c === undefined) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Contract not found.</div>;
-  if (!c) return <Loading />;
+  useEffect(() => {
+    contractsApi.get(id).then(setContract).catch(() => setContract(undefined));
+    jobsApi.list({ limit: 100 }).then((p) => setJobs(p.data.filter((j: any) => j.contractId === id))).catch(() => setJobs([]));
+  }, [id]);
+
+  const isHiring = user?.role === "HIRING_ORG" || user?.role === "ADMIN";
+
+  const createJob = async () => {
+    if (!jobForm.title || !jobForm.date || !jobForm.startTime || !jobForm.endTime) return toast.error("Required", "Title, date, start time and end time are required.");
+    setBusy(true);
+    try {
+      await jobsApi.create({ contractId: id, buildingId: contract.buildingId, ...jobForm });
+      toast.success("Job created");
+      setOpenCreateJob(false);
+      setJobForm({ title: "", date: "", startTime: "", endTime: "", instructions: "" });
+      const updated = await jobsApi.list({ limit: 100 });
+      setJobs(updated.data.filter((j: any) => j.contractId === id));
+    } catch (e: any) { toast.error("Failed", e?.message || "Could not create job"); } finally { setBusy(false); }
+  };
+
+  if (contract === undefined) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Contract not found.</div>;
+  if (!contract) return <Loading />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title={c.title || c.serviceName || "Contract"} subtitle={`${c.provider?.name} · ${c.organization?.name}`} actions={<><StatusBadge status={c.status} /><Button variant="outline" onClick={() => router.back()}><ArrowLeft className="h-4 w-4" /> Back</Button></>} />
-
+      <PageHeader title={contract.title || contract.serviceName || "Contract"} subtitle={`${contract.provider?.name ?? "Provider"} · ${contract.organization?.name ?? "Organization"}`} actions={<><StatusBadge status={contract.status} /><Button variant="outline" onClick={() => router.back()}><ArrowLeft className="h-4 w-4" /> Back</Button></>} />
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-1">
-          <p className="text-xs text-sage">Value</p>
-          <p className="mt-1 text-3xl font-bold text-charcoal">{money(c.price)}</p>
-          <div className="mt-5 space-y-2 text-sm text-sage">
-            <p className="flex items-center gap-2"><Building2 className="h-4 w-4 text-pine" /> {c.building?.name || "Building"}</p>
-            <p>Start: {dateShort(c.startDate)}{c.endDate ? ` · End: ${dateShort(c.endDate)}` : ""}</p>
-            {c.frequency && <p>Frequency: {c.frequency}</p>}
-            {c.paymentTerms && <p>Payment: {c.paymentTerms}</p>}
-          </div>
-        </Card>
         <Card className="lg:col-span-2">
-          <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Related jobs ({c.jobs?.length ?? 0})</h3></div>
-          <div className="space-y-2 p-4">
-            {c.jobs?.length ? c.jobs.map((j: any) => (
-              <Link key={j.id} href={`/jobs/${j.id}`} className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:border-brass">
-                <HardHat className="h-5 w-5 text-terracotta" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-charcoal">{j.title || j.serviceName || "Job"}</p>
-                  <p className="text-xs text-sage">{dateShort(j.date)}</p>
-                </div>
-                <StatusBadge status={j.status} />
-              </Link>
-            )) : <p className="py-8 text-center text-sm text-sage">No jobs linked to this contract yet.</p>}
+          <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Contract Details</h3></div>
+          <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <span className="flex items-center gap-2 text-sm text-sage"><DollarSign className="h-4 w-4 text-pine" /> {money(contract.price)}</span>
+            <span className="flex items-center gap-2 text-sm text-sage"><Building2 className="h-4 w-4 text-pine" /> {contract.building?.name ?? "Building"}</span>
+            <span className="flex items-center gap-2 text-sm text-sage"><Calendar className="h-4 w-4 text-pine" /> {dateShort(contract.startDate)}{contract.endDate ? ` - ${dateShort(contract.endDate)}` : ""}</span>
+            <span className="flex items-center gap-2 text-sm text-sage"><FileSignature className="h-4 w-4 text-pine" /> {contract.frequency || "One-time"}</span>
           </div>
+          {contract.paymentTerms && <p className="border-t border-border px-5 py-4 text-sm text-sage"><span className="font-medium text-charcoal">Payment terms:</span> {contract.paymentTerms}</p>}
+          {contract.sla && <p className="border-t border-border px-5 py-4 text-sm text-sage"><span className="font-medium text-charcoal">SLA:</span> {contract.sla}</p>}
+        </Card>
+        <Card className="p-5">
+          <h3 className="font-semibold text-charcoal">Quick Info</h3>
+          <div className="mt-3 space-y-2 text-sm text-sage">
+            <p>Status: <span className="font-medium text-charcoal">{contract.status}</span></p>
+            <p>Provider: <span className="font-medium text-charcoal">{contract.provider?.name}</span></p>
+            <p>Total Jobs: <span className="font-medium text-charcoal">{jobs.length}</span></p>
+          </div>
+          {isHiring && contract.status === "ACTIVE" && <Button className="mt-4 w-full" onClick={() => setOpenCreateJob(true)}><HardHat className="h-4 w-4" /> Create Job</Button>}
         </Card>
       </div>
+      <Card>
+        <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Jobs ({jobs.length})</h3></div>
+        {jobs.length === 0 ? (
+          <p className="p-5 text-sm text-sage">No jobs created yet. {isHiring && "Create a job from this contract to get started."}</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {jobs.map((j: any) => (
+              <div key={j.id} className="flex items-center gap-3 px-5 py-3">
+                <HardHat className="h-4 w-4 text-terracotta" />
+                <div className="flex-1"><p className="text-sm font-medium text-charcoal">{j.title}</p><p className="text-xs text-sage">{dateShort(j.date)}</p></div>
+                <StatusBadge status={j.status} />
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+      <Modal open={openCreateJob} onClose={() => setOpenCreateJob(false)} title="Create Job">
+        <form onSubmit={(e) => { e.preventDefault(); createJob(); }} className="space-y-4">
+          <Field label="Title"><Input value={jobForm.title} onChange={(e) => setJobForm({ ...jobForm, title: e.target.value })} placeholder="Weekly cleaning" required /></Field>
+          <Field label="Date"><Input type="date" value={jobForm.date} onChange={(e) => setJobForm({ ...jobForm, date: e.target.value })} required /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start Time"><Input type="time" value={jobForm.startTime} onChange={(e) => setJobForm({ ...jobForm, startTime: e.target.value })} required /></Field>
+            <Field label="End Time"><Input type="time" value={jobForm.endTime} onChange={(e) => setJobForm({ ...jobForm, endTime: e.target.value })} required /></Field>
+          </div>
+          <Field label="Instructions"><Textarea value={jobForm.instructions} onChange={(e) => setJobForm({ ...jobForm, instructions: e.target.value })} placeholder="Special instructions" /></Field>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => setOpenCreateJob(false)}>Cancel</Button><Button type="submit" loading={busy}>Create Job</Button></div>
+        </form>
+      </Modal>
     </div>
   );
 }

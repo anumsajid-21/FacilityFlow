@@ -21,6 +21,19 @@ export class ReviewsService {
     return { providerId, total, items, average: avg._avg };
   }
 
+  /** Reviews the org has written, for the Reviews table. */
+  async listForOrg(user: AuthUser) {
+    if (!user.hiringOrgId) throw new ForbiddenException("Only hiring organizations can list their reviews");
+    return this.prisma.review.findMany({
+      where: { organizationId: user.hiringOrgId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        provider: { select: { id: true, name: true } },
+        organization: { select: { id: true, name: true } },
+      },
+    });
+  }
+
   async create(user: AuthUser, jobId: string, providerId: string, dto: any) {
     if (user.role !== "HIRING_ORG" || !user.hiringOrgId) throw new ForbiddenException("Only hiring organizations can review providers");
     const job = await this.prisma.job.findUnique({ where: { id: jobId }, include: { contract: { include: { provider: true, organization: true } }, approvals: true } });

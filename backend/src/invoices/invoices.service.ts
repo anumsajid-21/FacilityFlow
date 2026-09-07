@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
@@ -59,7 +59,7 @@ export class InvoicesService {
         contractId: job.contractId,
         jobId: job.id,
         amount: job.contract.price,
-        taxAmount: 0,
+        tax: 0,
         discount: 0,
         total: job.contract.price,
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -96,6 +96,7 @@ export class InvoicesService {
       this.prisma.payment.aggregate({ where: { invoiceId: inv.id }, _sum: { amount: true } }).then((a) => Number(a._sum.amount ?? 0)),
     ]);
     if (Number(dto.amount) > total - totalPaid) throw new BadRequestException("Payment exceeds outstanding balance");
+    let finalStatus = inv.status as string;
     const payment = await this.prisma.$transaction(async (tx) => {
       const p = await tx.payment.create({
         data: { invoiceId: inv.id, amount: dto.amount, paymentReference: dto.paymentReference, date: dto.date ? new Date(dto.date) : new Date(), paymentMethod: dto.paymentMethod, status: "COMPLETED", recordedById: user.userId },
@@ -103,11 +104,72 @@ export class InvoicesService {
       const newTotal = await tx.payment.aggregate({ where: { invoiceId: inv.id }, _sum: { amount: true } });
       const paid = Number(newTotal._sum.amount ?? 0);
       const newStatus = paid >= Number(inv.total) ? "PAID" : inv.status;
+      finalStatus = newStatus;
       await tx.invoice.update({ where: { id: inv.id }, data: { status: newStatus } });
       return p;
     });
     void this.audit.log({ actorId: user.userId, action: "PAYMENT_RECORDED", entityType: "Payment", entityId: payment.id, details: { invoiceId: id, amount: dto.amount } });
+    await this.notifications.notifyProvider(inv.providerId, { type: "PAYMENT_RECORDED", title: "Payment recorded", message: `Payment of ${dto.amount} was recorded against invoice ${inv.invoiceNumber}.` });
+    if (finalStatus === "PAID") {
+      await this.notifications.notifyProvider(inv.providerId, { type: "INVOICE_PAID", title: "Invoice paid", message: `Invoice ${inv.invoiceNumber} is now fully paid.` });
+    }
     void this.notifications.notify({ userId: user.userId, type: "PAYMENT_RECORDED", title: "Payment recorded", message: `Payment of ${dto.amount} recorded against invoice.` });
     return payment;
+  }
+
+  async generatePdf(user: AuthUser, id: string, res: any) {
+    const inv = await this.get(user, id);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const PDFDocument = require("pdfkit");
+    const doc = new PDFDocument({ margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${inv.invoiceNumber}.pdf"`);
+
+    doc.pipe(res);
+
+    doc.fontSize(22).fillColor("#1F2937").text("FacilityFlow", 50, 45);
+    doc.fontSize(10).fillColor("#6B7280").text("Facility Services Marketplace", 50, 72);
+
+    doc.fontSize(18).fillColor("#111827").text("INVOICE", 400, 45, { align: "right" });
+    doc.fontSize(10).fillColor("#6B7280").text(`#${inv.invoiceNumber}`, 400, 68, { align: "right" });
+    doc.text(`Status: ${inv.status}`, 400, 82, { align: "right" });
+    doc.text(`Due Date: ${new Date(inv.dueDate).toLocaleDateString()}`, 400, 96, { align: "right" });
+
+    doc.moveTo(50, 120).lineTo(550, 120).strokeColor("#E5E7EB").stroke();
+
+    doc.fontSize(11).fillColor("#374151").text("Provider:", 50, 140, { underline: true });
+    doc.fontSize(10).fillColor("#1F2937").text(inv.provider?.name || "N/A", 50, 158);
+
+    doc.fontSize(11).fillColor("#374151").text("Billed To:", 300, 140, { underline: true });
+    doc.fontSize(10).fillColor("#1F2937").text(inv.organization?.name || "N/A", 300, 158);
+
+    doc.moveTo(50, 200).lineTo(550, 200).strokeColor("#E5E7EB").stroke();
+
+    doc.fontSize(12).fillColor("#1F2937").text("Summary", 50, 220);
+    doc.fontSize(10).fillColor("#4B5563");
+    doc.text("Subtotal:", 50, 245);
+    doc.text(`$${Number(inv.amount).toFixed(2)}`, 450, 245, { align: "right" });
+
+    doc.text("Tax:", 50, 265);
+    doc.text(`$${Number(inv.tax ?? 0).toFixed(2)}`, 450, 265, { align: "right" });
+
+    doc.text("Discount:", 50, 285);
+    doc.text(`-$${Number(inv.discount ?? 0).toFixed(2)}`, 450, 285, { align: "right" });
+
+    doc.moveTo(50, 310).lineTo(550, 310).strokeColor("#1F2937").stroke();
+
+    doc.fontSize(13).fillColor("#059669").text("Total:", 50, 325);
+    doc.fontSize(13).fillColor("#059669").text(`$${Number(inv.total).toFixed(2)}`, 450, 325, { align: "right" });
+
+    doc.fontSize(10).fillColor("#6B7280").text("Total Paid:", 50, 355);
+    doc.text(`$${Number(inv.totalPaid ?? 0).toFixed(2)}`, 450, 355, { align: "right" });
+
+    doc.text("Remaining Balance:", 50, 375);
+    doc.text(`$${Number(inv.balance ?? 0).toFixed(2)}`, 450, 375, { align: "right" });
+
+    doc.fontSize(9).fillColor("#9CA3AF").text("Thank you for choosing FacilityFlow.", 50, 440, { align: "center" });
+
+    doc.end();
   }
 }

@@ -1,10 +1,11 @@
-﻿import { Body, Controller, Get, Param, Patch, Post, UseGuards, ParseUUIDPipe } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, ParseUUIDPipe } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser, AuthUser } from "../common/decorators/user.decorator";
 import { AdminService } from "./admin.service";
 import { IsEnum, IsString } from "class-validator";
+import { PaginationDto } from "../common/dto/pagination.dto";
 
 class VerifyProviderDto {
   @IsEnum({ values: ["VERIFIED", "REJECTED", "SUSPENDED", "UNDER_REVIEW"] })
@@ -17,6 +18,16 @@ class VerifyProviderDto {
 @Controller("api/v1/admin")
 export class AdminController {
   constructor(private readonly admin: AdminService) {}
+
+  @Get("activity")
+  async activity() {
+    return this.admin.recentActivity();
+  }
+
+  @Get("dashboard")
+  async dashboard() {
+    return this.admin.dashboard();
+  }
 
   @Get("providers")
   async providers() {
@@ -31,6 +42,16 @@ export class AdminController {
   @Get("users")
   async users() {
     return this.admin.users();
+  }
+
+  @Get("service-requests")
+  async serviceRequests(@Query() q: PaginationDto) {
+    return this.admin.serviceRequests(q);
+  }
+
+  @Get("buildings")
+  async buildings(@Query() q: PaginationDto) {
+    return this.admin.buildings(q);
   }
 
   @Patch("providers/:id/status")

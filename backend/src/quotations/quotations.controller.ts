@@ -48,6 +48,13 @@ export class QuotationsController {
     return this.qs.list(user, providerId, organizationId, q);
   }
 
+  /** Provider: browse OPEN service requests available for quoting. */
+  @Get('open-requests')
+  @Roles('PROVIDER')
+  async openRequests(@CurrentUser() user: AuthUser) {
+    return this.qs.openRequests(user);
+  }
+
   @Post()
   @Roles('PROVIDER')
   async create(@CurrentUser() user: AuthUser, @Body() dto: QuotationDto) {

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Building2, Plus, MapPin, Layers, Archive, CornerDownRight } from "lucide-react";
+import { Building2, Plus, MapPin, Layers, Trash2, CornerDownRight } from "lucide-react";
 import { facilitiesApi } from "@/services/api";
 import { Card, PageHeader, EmptyState, Modal, Field, Input, Loading, useConfirm } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ export default function FacilitiesPage() {
   const [busy, setBusy] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
-  const load = () => facilitiesApi.buildings().then(setBuildings).catch(() => setBuildings([]));
+  const load = () => facilitiesApi.buildings().then((p) => setBuildings(p.data)).catch(() => setBuildings([]));
   useEffect(() => { load(); }, []);
 
   const selectBuilding = async (b: any) => {
@@ -35,9 +35,9 @@ export default function FacilitiesPage() {
       toast.success("Building created"); setOpenCreate(false); setForm({ name: "", address: "", city: "" }); load();
     } catch (e: any) { toast.error("Failed", e?.message || "Could not create building"); } finally { setBusy(false); }
   };
-  const archive = async (id: string) => {
-    if (!(await confirm("Archive building?", "This building will be archived.", { confirmLabel: "Archive", danger: true }))) return;
-    try { await facilitiesApi.archiveBuilding(id); toast.success("Building archived"); if (selected?.id === id) setSelected(null); load(); } catch (e: any) { toast.error("Failed", e?.message); }
+  const removeBuilding = async (id: string) => {
+    if (!(await confirm("Delete this building?", "The building and its floors/areas will be removed from your facilities. This cannot be undone.", { confirmLabel: "Delete", danger: true }))) return;
+    try { await facilitiesApi.deleteBuilding(id); toast.success("Building deleted"); if (selected?.id === id) setSelected(null); load(); } catch (e: any) { toast.error("Failed", e?.message); }
   };
   const addFloor = async () => {
     const name = window.prompt("Floor name"); if (!name || !selected) return;
@@ -67,7 +67,7 @@ return (
                   <div className="flex items-center gap-2">
                     {b.buildingType && <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-sage">{b.buildingType}</span>}
                     {b.numberOfFloors ? <span className="flex items-center gap-1 text-xs text-sage"><Layers className="h-3 w-3" /> {b.numberOfFloors}</span> : null}
-                    <button onClick={() => archive(b.id)} className="rounded p-1 text-sage hover:bg-terracotta-soft hover:text-terracotta" title="Archive"><Archive className="h-4 w-4" /></button>
+                    <button onClick={() => removeBuilding(b.id)} className="rounded p-1 text-sage hover:bg-terracotta-soft hover:text-terracotta" title="Delete building"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>
               </Card>

@@ -7,6 +7,8 @@ import { ReviewsService } from "./reviews.service";
 import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 class ReviewDto {
+  @IsOptional() @IsString() jobId?: string;
+  @IsOptional() @IsString() providerId?: string;
   @IsInt() @Min(1) @Max(5) quality: number;
   @IsInt() @Min(1) @Max(5) timeliness: number;
   @IsInt() @Min(1) @Max(5) professionalism: number;
@@ -20,6 +22,12 @@ class ReviewDto {
 export class ReviewsController {
   constructor(private readonly rs: ReviewsService) {}
 
+  @Get()
+  @Roles("HIRING_ORG", "ADMIN")
+  listForOrg(@CurrentUser() user: AuthUser) {
+    return this.rs.listForOrg(user);
+  }
+
   @Get("provider/:providerId")
   byProvider(@Param("providerId", ParseUUIDPipe) providerId: string) {
     return this.rs.byProvider(providerId);
@@ -27,7 +35,7 @@ export class ReviewsController {
 
   @Post()
   @Roles("HIRING_ORG", "ADMIN")
-  create(@CurrentUser() user: AuthUser, @Body("jobId") jobId: string, @Body("providerId") providerId: string, @Body() dto: ReviewDto) {
-    return this.rs.create(user, jobId, providerId, dto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: ReviewDto) {
+    return this.rs.create(user, dto.jobId as string, dto.providerId as string, dto);
   }
 }

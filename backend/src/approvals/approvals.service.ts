@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
@@ -43,7 +43,7 @@ export class ApprovalsService {
             contractId: contract.id,
             jobId: job.id,
             amount: contract.price,
-            taxAmount: 0,
+            tax: 0,
             discount: 0,
             total: contract.price,
             dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -55,6 +55,7 @@ export class ApprovalsService {
       }
     });
     void this.audit.log({ actorId: user.userId, action: "JOB_APPROVED", entityType: "Job", entityId: jobId, details: { notes } });
+    await this.notifications.notifyProvider(job.contract.providerId, { type: "JOB_APPROVED", title: "Job approved", message: `"${job.title ?? "Job"}" was approved by the client. An invoice was issued.` });
     return { jobId, decision: "APPROVED" };
   }
 
@@ -70,6 +71,7 @@ export class ApprovalsService {
       await tx.reworkRequest.create({ data: { jobId: job.id, reason: reason ?? '', requestedById: user.userId, attemptNumber: attempt } });
     });
     void this.audit.log({ actorId: user.userId, action: "REWORK_REQUESTED", entityType: "Job", entityId: jobId, details: { reason, attempt } });
+    await this.notifications.notifyProvider(job.contract.providerId, { type: "REWORK_REQUESTED", title: "Rework requested", message: `Rework requested for "${job.title ?? "job"}": ${reason ?? ""}` });
     void this.notifications.notify({ userId: user.userId, type: "REWORK_REQUESTED", title: "Rework requested", message: `Rework requested: ${reason ?? ""}` });
     return { jobId, status: "REWORK", attempt };
   }

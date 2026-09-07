@@ -13,10 +13,18 @@ import { authService } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain an uppercase letter")
+  .regex(/[a-z]/, "Password must contain a lowercase letter")
+  .regex(/[0-9]/, "Password must contain a number")
+  .regex(/[^A-Za-z0-9]/, "Password must contain a special character");
+
 const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: passwordSchema,
   companyName: z.string().min(2, "Company/Organization name is required"),
   role: z.enum(["HIRING_ORG", "PROVIDER"]),
 });
@@ -102,6 +110,7 @@ export default function RegisterPage() {
             </Field>
             <Field label="Password" error={errors.password?.message}>
               <Input type="password" placeholder="Min. 8 characters" {...register("password")} />
+              <p className="mt-1 text-xs text-sage">At least 8 characters with uppercase, lowercase, number and special character.</p>
             </Field>
             <Button type="submit" className="w-full" disabled={isSubmitting} size="lg">
               {isSubmitting ? "Creating account…" : "Create account"} {!isSubmitting && <ArrowRight className="h-4 w-4" />}

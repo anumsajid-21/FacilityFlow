@@ -30,19 +30,25 @@ export interface TransformResponse {
  */
 @Injectable()
 export class TransformInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<TransformResponse> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const http = context.switchToHttp();
+    const res = http.getResponse();
     return next.handle().pipe(
       map((payload) => {
+        if (res.headersSent || payload === undefined) {
+          return payload;
+        }
         if (payload && typeof payload === 'object' && 'meta' in payload && 'data' in payload) {
           const p = payload as Paginated;
-          return { data: this.toSafeJson(p.data), meta: p.meta } as TransformResponse;
+          return { data: this.toSafeJson(p.data), meta: p.meta };
         }
-        return { data: this.toSafeJson(payload) } as TransformResponse;
+        return { data: this.toSafeJson(payload) };
       }),
     );
   }
 
   private toSafeJson(value: unknown): unknown {
+    if (value === undefined) return null;
     return JSON.parse(
       JSON.stringify(value, (_key, val) =>
         val && typeof val === 'object' && typeof val.toNumber === 'function'

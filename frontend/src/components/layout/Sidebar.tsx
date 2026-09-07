@@ -5,22 +5,26 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, Building2, FileText, Users, Quote, FileSignature,
-  HardHat, ReceiptText, Star, Settings, LogOut, Menu, X, ChevronLeft,
+  HardHat, ReceiptText, Star, Settings, LogOut, Menu, X, ChevronLeft, UserCheck,
+  Bell, Shield,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
 const ALL_NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
   { href: "/facilities", label: "Facilities", icon: Building2, roles: ["HIRING_ORG", "ADMIN"] },
   { href: "/service-requests", label: "Service Requests", icon: FileText, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/providers", label: "Providers", icon: Users, roles: ["HIRING_ORG", "ADMIN"] },
   { href: "/quotations", label: "Quotations", icon: Quote, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/contracts", label: "Contracts", icon: FileSignature, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
-  { href: "/jobs", label: "Jobs", icon: HardHat, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
+  { href: "/jobs", label: "Jobs", icon: HardHat, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
+  { href: "/workers", label: "Workers", icon: UserCheck, roles: ["PROVIDER"] },
   { href: "/invoices", label: "Invoices", icon: ReceiptText, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/reviews", label: "Reviews", icon: Star, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
-  { href: "/settings", label: "Settings", icon: Settings, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
+  { href: "/notifications", label: "Notifications", icon: Bell, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
+  { href: "/admin", label: "Admin", icon: Shield, roles: ["ADMIN"] },
+  { href: "/settings", label: "Settings", icon: Settings, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
 ];
 
 export function Sidebar() {
@@ -82,7 +86,7 @@ export function Sidebar() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ivory">{user?.name ?? "Signed in"}</p>
               <p className="truncate text-[11px] text-sand/60">
-                {role === "HIRING_ORG" ? "Hiring organization" : role === "PROVIDER" ? "Service provider" : "Administrator"}
+                {role === "HIRING_ORG" ? "Hiring organization" : role === "PROVIDER" ? "Service provider" : role === "WORKER" ? "Service worker" : "Administrator"}
               </p>
             </div>
           </div>

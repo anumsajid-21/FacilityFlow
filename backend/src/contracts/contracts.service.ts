@@ -22,7 +22,18 @@ export class ContractsService {
     }
     const [total, items] = await Promise.all([
       this.prisma.contract.count({ where }),
-      this.prisma.contract.findMany({ where, skip: (q.page - 1) * q.limit, take: q.limit, orderBy: { createdAt: "desc" } }),
+      this.prisma.contract.findMany({
+        where,
+        skip: (q.page - 1) * q.limit,
+        take: q.limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          organization: { select: { id: true, name: true } },
+          provider: { select: { id: true, name: true } },
+          building: { select: { id: true, name: true, city: true, address: true } },
+          jobs: { select: { id: true, status: true, title: true, date: true } },
+        },
+      }),
     ]);
     return buildPage(items, total, q.page, q.limit);
   }

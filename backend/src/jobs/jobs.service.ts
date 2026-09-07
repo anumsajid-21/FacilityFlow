@@ -19,7 +19,8 @@ export class JobsService {
     if (!job) throw new NotFoundException("Job not found");
     const isProvider = user.role === "PROVIDER" && user.providerId === job.contract.providerId;
     const isHiring = user.role === "HIRING_ORG" && user.hiringOrgId === job.contract.organizationId;
-    if (!isProvider && !isHiring && user.role !== "ADMIN") throw new ForbiddenException("Access denied");
+    const isWorker = user.role === "WORKER" && user.workerId ? (await this.prisma.workerAssignment.count({ where: { jobId: job.id, workerId: user.workerId } })) > 0 : false;
+    if (!isProvider && !isHiring && !isWorker && user.role !== "ADMIN") throw new ForbiddenException("Access denied");
     return job;
   }
 
@@ -31,6 +32,9 @@ export class JobsService {
     } else if (user.role === "PROVIDER" && user.providerId) {
       const contracts = await this.prisma.contract.findMany({ where: { providerId: user.providerId }, select: { id: true } });
       where.contractId = { in: contracts.map((c) => c.id) };
+    } else if (user.role === "WORKER" && user.workerId) {
+      const assignments = await this.prisma.workerAssignment.findMany({ where: { workerId: user.workerId }, select: { jobId: true } });
+      where.id = { in: assignments.map((a) => a.jobId) };
     }
     const [total, items] = await Promise.all([
       this.prisma.job.count({ where }),
@@ -98,7 +102,7 @@ export class JobsService {
     const job = await this.load(user, id);
     const valid = (user.role === "PROVIDER" && user.providerId === job.contract.providerId) || (user.role === "HIRING_ORG" && user.hiringOrgId === job.contract.organizationId) || user.role === "ADMIN";
     if (!valid) throw new ForbiddenException("Not authorized to start this job");
-    if (job.status !== "ASSIGNED" && job.status !== "SCHEDULED") throw new BadRequestException("Job must be assigned or scheduled before starting");
+    if (job.status !== "ASSIGNED" && job.status !== "SCHEDULED" && job.status !== "REWORK") throw new BadRequestException("Job must be assigned, scheduled or in rework before starting");
     const updated = await this.prisma.job.update({ where: { id: job.id }, data: { status: "IN_PROGRESS", startedAt: new Date() } });
     void this.audit.log({ actorId: user.userId, action: "JOB_STARTED", entityType: "Job", entityId: id });
     return updated;
@@ -110,6 +114,7 @@ export class JobsService {
     const updated = await this.prisma.$transaction(async (tx) => {
       const rec = await tx.job.update({ where: { id: job.id }, data: { status: "COMPLETED", completedAt: new Date() } });
       await tx.approval.create({ data: { jobId: job.id, decision: "APPROVED", approvedByUserId: user.userId, notes: "auto-created on completion" } });
+      await this.notifications.notifyOrganization(job.contract.organizationId, { type: "JOB_COMPLETED", title: "Job completed", message: `${job.title ?? "Job"} was marked complete and is awaiting your approval.` });
       await this.notifications.notify({ userId: user.userId, type: "JOB_COMPLETED", title: "Job completed", message: "Job marked complete, awaiting approval." });
       return rec;
     });
@@ -140,6 +145,7 @@ export class JobsService {
     const assignment = await this.prisma.workerAssignment.create({ data: { jobId: job.id, workerId, assignedBy: user.userId } });
     await this.prisma.job.update({ where: { id: job.id }, data: { status: "ASSIGNED" } });
     void this.audit.log({ actorId: user.userId, action: "WORKER_ASSIGNED", entityType: "WorkerAssignment", entityId: assignment.id, details: { jobId, workerId } });
+    await this.notifications.notifyOrganization(job.contract.organizationId, { type: "WORKER_ASSIGNED", title: "Worker assigned", message: `A worker was assigned to "${job.title ?? "your job"}".` });
     void this.notifications.notify({ userId: user.userId, type: "WORKER_ASSIGNED", title: "Worker assigned", message: "A worker was assigned to the job." });
     return assignment;
   }

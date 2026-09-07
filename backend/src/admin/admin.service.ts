@@ -1,15 +1,37 @@
-﻿import { Injectable, BadRequestException } from "@nestjs/common";
+import { Injectable, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PaginationDto, buildPage } from "../common/dto/pagination.dto";
 
-/**
- * Admin oversight: provider verification, user/organization oversight,
- * marketplace oversight.
- */
 @Injectable()
 export class AdminService {
   constructor(private prisma: PrismaService, private audit: AuditService, private notifications: NotificationsService) {}
+
+  async dashboard() {
+    const [totalOrganizations, totalProviders, totalServiceRequests, activeContracts, recentOrgs, recentProviders, recentRequests] = await Promise.all([
+      this.prisma.organization.count(),
+      this.prisma.provider.count(),
+      this.prisma.serviceRequest.count({ where: { isArchived: false } }),
+      this.prisma.contract.count({ where: { status: "ACTIVE" } }),
+      this.prisma.organization.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { members: { include: { user: { select: { name: true, email: true } } } } } }),
+      this.prisma.provider.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
+      this.prisma.serviceRequest.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { organization: true, building: true } }),
+    ]);
+    return {
+      totalOrganizations,
+      totalProviders,
+      totalServiceRequests,
+      activeContracts,
+      recentOrganizations: recentOrgs,
+      recentProviders: recentProviders,
+      recentServiceRequests: recentRequests,
+    };
+  }
+
+  async recentActivity() {
+    return this.audit.list({}, 20);
+  }
 
   async providers() {
     return this.prisma.provider.findMany({
@@ -33,6 +55,34 @@ export class AdminService {
       orderBy: { createdAt: "desc" },
       include: { hiringOrg: { select: { id: true, name: true } }, provider: { select: { id: true, name: true } } },
     });
+  }
+
+  async serviceRequests(q: PaginationDto) {
+    const [total, items] = await Promise.all([
+      this.prisma.serviceRequest.count({ where: { isArchived: false } }),
+      this.prisma.serviceRequest.findMany({
+        where: { isArchived: false },
+        skip: (q.page - 1) * q.limit,
+        take: q.limit,
+        orderBy: { createdAt: "desc" },
+        include: { organization: true, building: true, category: true },
+      }),
+    ]);
+    return buildPage(items, total, q.page, q.limit);
+  }
+
+  async buildings(q: PaginationDto) {
+    const [total, items] = await Promise.all([
+      this.prisma.building.count({ where: { isArchived: false } }),
+      this.prisma.building.findMany({
+        where: { isArchived: false },
+        skip: (q.page - 1) * q.limit,
+        take: q.limit,
+        orderBy: { name: "asc" },
+        include: { organization: true, floors: { include: { areas: true } } },
+      }),
+    ]);
+    return buildPage(items, total, q.page, q.limit);
   }
 
   async verifyProvider(id: string, status: string, notes?: string) {

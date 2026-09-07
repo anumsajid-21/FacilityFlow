@@ -16,7 +16,7 @@ export default function ProvidersPage() {
 
   const open = async (p: any) => {
     setSelected(p); setReviews([]);
-    try { setReviews(await reviewsApi.byProvider(p.id)); } catch { setReviews([]); }
+    try { const r = await reviewsApi.byProvider(p.id); setReviews(Array.isArray(r) ? r : (r?.items ?? [])); } catch { setReviews([]); }
   };
 
   return (

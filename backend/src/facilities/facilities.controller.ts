@@ -109,6 +109,26 @@ export class FacilitiesController {
     return { id, archived: true };
   }
 
+  /** Delete (soft) a building. Tenant-isolated: only the owning organization may delete. */
+  @Delete('buildings/:id')
+  async deleteBuilding(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    const building = await this.prisma.building.findFirst({
+      where: { id, organizationId: user.hiringOrgId! },
+      select: { id: true },
+    });
+    if (!building) throw new NotFoundException('Building not found');
+    await this.prisma.$transaction([
+      this.prisma.floor.updateMany({ where: { buildingId: id }, data: { isArchived: true } }),
+      this.prisma.area.updateMany({
+        where: { floor: { buildingId: id } },
+        data: { isArchived: true },
+      }),
+      this.prisma.building.update({ where: { id }, data: { isArchived: true } }),
+    ]);
+    void this.audit.log({ actorId: user.userId, action: 'BUILDING_DELETED', entityType: 'Building', entityId: id });
+    return { id, deleted: true };
+  }
+
   // ---------- Floors ----------
   @Get('buildings/:buildingId/floors')
   async listFloors(@CurrentUser() user: AuthUser, @Param('buildingId', ParseUUIDPipe) buildingId: string) {
@@ -126,6 +146,7 @@ export class FacilitiesController {
 
   @Patch('floors/:id')
   async updateFloor(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: FloorDto) {
+    await this.ensureFloor(id, user);
     const floor = await this.prisma.floor.updateMany({ where: { id }, data: { name: dto.name } });
     if (!floor.count) throw new NotFoundException('Floor not found');
     return { id };
@@ -133,6 +154,7 @@ export class FacilitiesController {
 
   @Post('floors/:id/archive')
   async archiveFloor(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.ensureFloor(id, user);
     const floor = await this.prisma.floor.updateMany({ where: { id }, data: { isArchived: true } });
     if (!floor.count) throw new NotFoundException('Floor not found');
     return { id, archived: true };
@@ -140,13 +162,13 @@ export class FacilitiesController {
 
   @Get('floors/:floorId/areas')
   async listAreas(@CurrentUser() user: AuthUser, @Param('floorId', ParseUUIDPipe) floorId: string) {
-    await this.ensureFloor(floorId);
+    await this.ensureFloor(floorId, user);
     return this.prisma.area.findMany({ where: { floorId, isArchived: false } });
   }
 
   @Post('floors/:floorId/areas')
   async createArea(@CurrentUser() user: AuthUser, @Param('floorId', ParseUUIDPipe) floorId: string, @Body() dto: AreaDto) {
-    await this.ensureFloor(floorId);
+    await this.ensureFloor(floorId, user);
     const area = await this.prisma.area.create({ data: { name: dto.name, floorId, category: dto.category ?? null } });
     void this.audit.log({ actorId: user.userId, action: 'AREA_CREATED', entityType: 'Area', entityId: area.id, details: dto });
     return area;
@@ -154,6 +176,7 @@ export class FacilitiesController {
 
   @Patch('areas/:id')
   async updateArea(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AreaDto) {
+    await this.ensureArea(id, user);
     const area = await this.prisma.area.updateMany({ where: { id }, data: { name: dto.name, category: dto.category ?? null } });
     if (!area.count) throw new NotFoundException('Area not found');
     return { id };
@@ -168,8 +191,19 @@ export class FacilitiesController {
     const building = await this.prisma.building.findUnique({ where: { id: buildingId }, select: { id: true, organizationId: true } });
     if (!building || building.organizationId !== user.hiringOrgId) throw new NotFoundException('Building not found');
   }
-  private async ensureFloor(floorId: string) {
-    const floor = await this.prisma.floor.findUnique({ where: { id: floorId }, select: { id: true } });
-    if (!floor) throw new NotFoundException('Floor not found');
+  private async ensureFloor(floorId: string, user: AuthUser) {
+    const floor = await this.prisma.floor.findUnique({
+      where: { id: floorId },
+      select: { id: true, building: { select: { organizationId: true } } },
+    });
+    if (!floor || floor.building.organizationId !== user.hiringOrgId) throw new NotFoundException('Floor not found');
+  }
+
+  private async ensureArea(areaId: string, user: AuthUser) {
+    const area = await this.prisma.area.findUnique({
+      where: { id: areaId },
+      select: { id: true, floor: { select: { building: { select: { organizationId: true } } } } },
+    });
+    if (!area || area.floor.building.organizationId !== user.hiringOrgId) throw new NotFoundException('Area not found');
   }
 }

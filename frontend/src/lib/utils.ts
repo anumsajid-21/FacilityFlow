@@ -20,6 +20,11 @@ export function dateTime(d: string | Date | null | undefined): string {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+export function timeShort(d: string | Date | null | undefined): string {
+  if (!d) return "";
+  return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export function timeAgo(d: string | Date): string {
   const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
   if (s < 60) return "just now";

@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
@@ -39,19 +39,26 @@ export class ServiceRequestsService {
     const orgId = user.hiringOrgId!;
     const building = await this.prisma.building.findUnique({ where: { id: dto.buildingId }, select: { id: true, organizationId: true } });
     if (!building || building.organizationId !== orgId) throw new ForbiddenException("Building not accessible");
+
+    const categoryId = dto.categoryId && dto.categoryId.trim() ? dto.categoryId.trim() : undefined;
+    const floorId = dto.floorId && dto.floorId.trim() ? dto.floorId.trim() : undefined;
+    const areaId = dto.areaId && dto.areaId.trim() ? dto.areaId.trim() : undefined;
+    const preferredDate = dto.preferredDate ? new Date(dto.preferredDate) : undefined;
+    const budget = dto.budget !== undefined && dto.budget !== null && dto.budget !== "" ? Number(dto.budget) : undefined;
+
     const sr = await this.prisma.serviceRequest.create({
       data: {
         title: dto.title,
         description: dto.description,
-        categoryId: dto.categoryId,
+        categoryId,
         buildingId: dto.buildingId,
-        floorId: dto.floorId,
-        areaId: dto.areaId,
-        requirements: dto.requirements,
-        preferredDate: dto.preferredDate,
-        frequency: dto.frequency,
-        budget: dto.budget,
-        priority: dto.priority,
+        floorId,
+        areaId,
+        requirements: dto.requirements || undefined,
+        preferredDate,
+        frequency: dto.frequency || undefined,
+        budget,
+        priority: dto.priority || "NORMAL",
         organizationId: orgId,
         status: "DRAFT",
       },
@@ -62,7 +69,13 @@ export class ServiceRequestsService {
 
   async update(user: AuthUser, id: string, dto: any) {
     const sr = await this.get(user, id);
-    const updated = await this.prisma.serviceRequest.update({ where: { id: sr.id }, data: { ...dto, updatedAt: new Date() } });
+    const dataToUpdate: any = { ...dto, updatedAt: new Date() };
+    if (dto.preferredDate) dataToUpdate.preferredDate = new Date(dto.preferredDate);
+    if (dto.categoryId !== undefined) dataToUpdate.categoryId = dto.categoryId && dto.categoryId.trim() ? dto.categoryId.trim() : null;
+    if (dto.floorId !== undefined) dataToUpdate.floorId = dto.floorId && dto.floorId.trim() ? dto.floorId.trim() : null;
+    if (dto.areaId !== undefined) dataToUpdate.areaId = dto.areaId && dto.areaId.trim() ? dto.areaId.trim() : null;
+    if (dto.budget !== undefined) dataToUpdate.budget = dto.budget !== "" && dto.budget !== null ? Number(dto.budget) : null;
+    const updated = await this.prisma.serviceRequest.update({ where: { id: sr.id }, data: dataToUpdate });
     void this.audit.log({ actorId: user.userId, action: "SERVICE_REQUEST_UPDATED", entityType: "ServiceRequest", entityId: id, details: dto });
     return updated;
   }

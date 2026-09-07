@@ -1,11 +1,18 @@
-import { IsEmail, IsIn, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
+
+const STRONG_PASSWORD_MESSAGE =
+  'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a special character';
 
 export class RegisterDto {
   @IsEmail()
   email: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @Matches(/[A-Z]/, { message: STRONG_PASSWORD_MESSAGE })
+  @Matches(/[a-z]/, { message: STRONG_PASSWORD_MESSAGE })
+  @Matches(/[0-9]/, { message: STRONG_PASSWORD_MESSAGE })
+  @Matches(/[^A-Za-z0-9]/, { message: STRONG_PASSWORD_MESSAGE })
   password: string;
 
   @IsString()

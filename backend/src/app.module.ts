@@ -24,11 +24,8 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AdminModule } from './admin/admin.module';
+import { SettingsModule } from './settings/settings.module';
 
-/**
- * Makes Passport's JwtAuthGuard resolvable from every feature module
- * without each one importing PassportModule explicitly.
- */
 @Global()
 @Module({
   imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
@@ -38,31 +35,26 @@ export class GlobalPassportModule {}
 
 @Module({
   imports: [
-    // Core / global
     GlobalPassportModule,
     PrismaModule,
     AuditModule,
     NotificationsModule,
     FilesModule,
-    // Identity
     AuthModule,
     OrganizationsModule,
-    // Facility management
+    SettingsModule,
     FacilitiesModule,
     AssetsModule,
     ChecklistsModule,
-    // Marketplace flow
     ProvidersModule,
     ServiceRequestsModule,
     MatchingModule,
     QuotationsModule,
     ContractsModule,
-    // Delivery
     JobsModule,
     WorkersModule,
     ProofOfWorkModule,
     ApprovalsModule,
-    // Billing & feedback
     InvoicesModule,
     ReviewsModule,
     AnalyticsModule,

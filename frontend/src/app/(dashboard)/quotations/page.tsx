@@ -1,82 +1,310 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Quote, Check, X } from "lucide-react";
-import { quotationsApi } from "@/services/api";
-import { Card, PageHeader, EmptyState, Loading, StatusBadge } from "@/components/ui/kit";
+import { Quote, Check, Plus, FileText, Send } from "lucide-react";
+import { quotationsApi, serviceRequestsApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth";
+import { Card, PageHeader, EmptyState, Loading, StatusBadge, Modal, Field, Input, Textarea, Tabs } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
 import { money, dateShort, humanize } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/kit";
 
 export default function QuotationsPage() {
+  const { user } = useAuthStore();
+  const isProvider = user?.role === "PROVIDER";
   const [quotations, setQuotations] = useState<any[] | null>(null);
+  const [openRequests, setOpenRequests] = useState<any[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [tab, setTab] = useState<"quotations" | "browse">(isProvider ? "browse" : "quotations");
+  const [openQuote, setOpenQuote] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [quoteForm, setQuoteForm] = useState({
+    price: "", laborCost: "", materialCost: "", numberOfWorkers: "1",
+    duration: "", equipment: "", sla: "", warranty: "", terms: "", notes: "",
+    expiryDate: "",
+  });
+  const [submittingQuote, setSubmittingQuote] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
-  const load = () => quotationsApi.list().then((p) => setQuotations(p.data)).catch(() => setQuotations([]));
-  useEffect(() => { load(); }, []);
+  const loadQuotations = () =>
+    quotationsApi.list().then((p) => setQuotations(p.data)).catch(() => setQuotations([]));
 
-  // group by service request for side-by-side comparison
+  const loadOpenRequests = () =>
+    quotationsApi.openRequests()
+      .then((r) => setOpenRequests(Array.isArray(r) ? r : (r as any)?.items ?? []))
+      .catch(() => setOpenRequests([]));
+
+  useEffect(() => {
+    loadQuotations();
+    if (isProvider) loadOpenRequests();
+  }, [isProvider]);
+
+  // Group by service request for org side-by-side comparison
   const groups = (quotations ?? []).reduce<Record<string, any[]>>((acc, q) => {
     const id = q.serviceRequestId || "open";
     (acc[id] = acc[id] || []).push(q);
     return acc;
   }, {});
-  const all = Object.entries(groups).sort((a, b) => (b[1][0].createdAt || "").localeCompare(a[1][0].createdAt || ""));
+  const all = Object.entries(groups).sort((a, b) =>
+    (b[1][0].createdAt || "").localeCompare(a[1][0].createdAt || ""),
+  );
 
   const accept = async (id: string) => {
-    const ok = await confirm("Accept this quotation?", "Accepting will select this provider and reject competing quotations.", { confirmLabel: "Accept" });
+    const ok = await confirm(
+      "Accept this quotation?",
+      "Accepting will select this provider and reject competing quotations. A contract will be created automatically.",
+      { confirmLabel: "Accept" },
+    );
     if (!ok) return;
     setBusy(id);
-    try { await quotationsApi.accept(id); toast.success("Quotation accepted", "Provider selected."); load(); }
-    catch (e: any) { toast.error("Failed", e?.message); } finally { setBusy(null); }
+    try {
+      await quotationsApi.accept(id);
+      toast.success("Quotation accepted", "Provider selected and contract created.");
+      loadQuotations();
+    } catch (e: any) { toast.error("Failed", e?.message); } finally { setBusy(null); }
   };
+
+  const openQuoteModal = (req: any) => {
+    setSelectedRequest(req);
+    setQuoteForm({ price: "", laborCost: "", materialCost: "", numberOfWorkers: "1", duration: "", equipment: "", sla: "", warranty: "", terms: "", notes: "", expiryDate: "" });
+    setOpenQuote(true);
+  };
+
+  const submitQuotation = async () => {
+    if (!quoteForm.price || Number(quoteForm.price) <= 0)
+      return toast.error("Required", "Please enter a valid price.");
+    setSubmittingQuote(true);
+    try {
+      const created = await quotationsApi.create({
+        serviceRequestId: selectedRequest.id,
+        price: Number(quoteForm.price),
+        laborCost: quoteForm.laborCost ? Number(quoteForm.laborCost) : undefined,
+        materialCost: quoteForm.materialCost ? Number(quoteForm.materialCost) : undefined,
+        numberOfWorkers: Number(quoteForm.numberOfWorkers),
+        duration: quoteForm.duration || undefined,
+        equipment: quoteForm.equipment || undefined,
+        sla: quoteForm.sla || undefined,
+        warranty: quoteForm.warranty || undefined,
+        terms: quoteForm.terms || undefined,
+        notes: quoteForm.notes || undefined,
+        expiryDate: quoteForm.expiryDate ? new Date(quoteForm.expiryDate).toISOString() : undefined,
+      });
+      // immediately submit so org can see it
+      await quotationsApi.submit(created.id);
+      toast.success("Quotation submitted", "The organization can now review your proposal.");
+      setOpenQuote(false);
+      loadQuotations();
+      loadOpenRequests();
+      setTab("quotations");
+    } catch (e: any) { toast.error("Failed", e?.message); } finally { setSubmittingQuote(false); }
+  };
+
+  const withdraw = async (id: string) => {
+    const ok = await confirm("Withdraw quotation?", "This will remove your proposal from this request.", { confirmLabel: "Withdraw", danger: true });
+    if (!ok) return;
+    setBusy(id);
+    try {
+      await quotationsApi.withdraw(id);
+      toast.success("Quotation withdrawn");
+      loadQuotations();
+    } catch (e: any) { toast.error("Failed", e?.message); } finally { setBusy(null); }
+  };
+
+  const tabs = isProvider
+    ? [
+        { key: "browse", label: "Browse Requests", count: openRequests.length },
+        { key: "quotations", label: "My Quotations", count: quotations?.length ?? 0 },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Quotations" subtitle="Compare provider proposals and select a partner" />
+      <PageHeader
+        title="Quotations"
+        subtitle={isProvider ? "Submit proposals for open service requests" : "Compare provider proposals and select a partner"}
+      />
 
-      {!quotations ? <Loading /> : all.length === 0 ? (
-        <Card><EmptyState icon={<Quote className="h-6 w-6" />} title="No quotations" description="Provider proposals will appear here for comparison." /></Card>
-      ) : (
-        <div className="space-y-6">
-          {all.map(([reqId, list]) => (
-            <div key={reqId}>
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-semibold text-charcoal">{list[0]?.serviceRequest?.title || "Service request"}</h3>
-                <span className="text-xs text-sage">Request: {reqId.slice(0, 8)}</span>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                {list.map((q) => (
-                  <Card key={q.id} className={`flex flex-col p-5 ${q.status === "ACCEPTED" ? "border-pine ring-1 ring-pine/30" : ""}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brass-soft font-bold text-[#7A5E2E]">{q.provider?.name?.slice(0, 1).toUpperCase()}</div>
-                      <StatusBadge status={q.status} />
+      {isProvider && (
+        <Tabs
+          tabs={tabs}
+          active={tab}
+          onChange={(k) => setTab(k as any)}
+        />
+      )}
+
+      {/* ── Provider: Browse open requests ── */}
+      {isProvider && tab === "browse" && (
+        <>
+          {openRequests.length === 0 ? (
+            <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="No open requests" description="There are no open service requests to quote on right now." /></Card>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {openRequests.map((req) => {
+                // check if provider already quoted on this
+                const alreadyQuoted = (quotations ?? []).some((q) => q.serviceRequestId === req.id);
+                return (
+                  <Card key={req.id}>
+                    <div className="flex items-start justify-between border-b border-border px-5 py-4">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold text-charcoal">{req.title}</h3>
+                        <p className="text-xs text-sage">{req.organization?.name} · {req.building?.name}</p>
+                      </div>
+                      <StatusBadge status={req.status} />
                     </div>
-                    <h4 className="mt-3 font-semibold text-charcoal">{q.provider?.name || "Provider"}</h4>
-                    <div className="mt-3 flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-charcoal">{money(q.price)}</span>
-                      {q.duration && <span className="text-sm text-sage">/ {q.duration}</span>}
-                    </div>
-                    <dl className="mt-4 space-y-2 text-sm">
-                      {q.numberOfWorkers ? <div className="flex justify-between"><dt className="text-sage">Workers</dt><dd className="font-medium text-charcoal">{q.numberOfWorkers}</dd></div> : null}
-                      {q.duration ? <div className="flex justify-between"><dt className="text-sage">Duration</dt><dd className="font-medium text-charcoal">{q.duration}</dd></div> : null}
-                      {q.sla ? <div className="flex justify-between"><dt className="text-sage">SLA</dt><dd className="font-medium text-charcoal">{q.sla}</dd></div> : null}
-                      {q.expiryDate ? <div className="flex justify-between"><dt className="text-sage">Expires</dt><dd className="font-medium text-charcoal">{dateShort(q.expiryDate)}</dd></div> : null}
-                    </dl>
-                    {q.terms && <p className="mt-3 line-clamp-2 text-xs text-sage">{q.terms}</p>}
-                    <div className="mt-4 flex gap-2 border-t border-border pt-3">
-                      <Button size="sm" className="flex-1" disabled={q.status === "ACCEPTED"} loading={busy === q.id} onClick={() => accept(q.id)}>
-                        {q.status === "ACCEPTED" ? <>Selected <Check className="h-4 w-4" /></> : "Accept quotation"}
-                      </Button>
+                    <div className="space-y-3 p-5">
+                      {req.description && <p className="line-clamp-2 text-sm text-sage">{req.description}</p>}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-sage">
+                        {req.budget && <span>Budget: <span className="font-medium text-charcoal">{money(req.budget)}</span></span>}
+                        {req.preferredDate && <span>Needed by: <span className="font-medium text-charcoal">{dateShort(req.preferredDate)}</span></span>}
+                        {req.priority && <span>Priority: <span className="font-medium text-charcoal">{humanize(req.priority)}</span></span>}
+                      </div>
+                      <div className="pt-1">
+                        {alreadyQuoted ? (
+                          <p className="text-sm font-medium text-pine">✓ Already quoted</p>
+                        ) : (
+                          <Button className="w-full" onClick={() => openQuoteModal(req)}>
+                            <Plus className="h-4 w-4" /> Submit Quotation
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </Card>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
+
+      {/* ── Provider: My quotations ── */}
+      {isProvider && tab === "quotations" && (
+        <>
+          {!quotations ? <Loading /> : quotations.length === 0 ? (
+            <Card><EmptyState icon={<Quote className="h-6 w-6" />} title="No quotations yet" description="Browse open requests and submit your first quotation." action={<Button onClick={() => setTab("browse")}><Plus className="h-4 w-4" /> Browse Requests</Button>} /></Card>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {quotations.map((q) => (
+                <Card key={q.id} className={`p-5 ${q.status === "ACCEPTED" ? "border-pine ring-1 ring-pine/30" : ""}`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold text-charcoal">{q.serviceRequest?.title || "Service request"}</h4>
+                      <p className="text-xs text-sage">{dateShort(q.createdAt)}</p>
+                    </div>
+                    <StatusBadge status={q.status} />
+                  </div>
+                  <p className="mt-3 text-2xl font-bold text-charcoal">{money(q.price)}</p>
+                  {q.duration && <p className="text-sm text-sage">Duration: {q.duration}</p>}
+                  {q.numberOfWorkers && <p className="text-sm text-sage">Workers: {q.numberOfWorkers}</p>}
+                  {["DRAFT", "SUBMITTED"].includes(q.status) && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10" loading={busy === q.id} onClick={() => withdraw(q.id)}>
+                        Withdraw
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Hiring org: Compare & accept ── */}
+      {!isProvider && (
+        <>
+          {!quotations ? <Loading /> : all.length === 0 ? (
+            <Card><EmptyState icon={<Quote className="h-6 w-6" />} title="No quotations" description="Provider proposals will appear here for comparison once you submit service requests." /></Card>
+          ) : (
+            <div className="space-y-6">
+              {all.map(([reqId, list]) => (
+                <div key={reqId}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-semibold text-charcoal">{list[0]?.serviceRequest?.title || "Service request"}</h3>
+                    <span className="text-xs text-sage">Request: {reqId.slice(0, 8)}</span>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                    {list.map((q) => (
+                      <Card key={q.id} className={`flex flex-col p-5 ${q.status === "ACCEPTED" ? "border-pine ring-1 ring-pine/30" : ""}`}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brass-soft font-bold text-[#7A5E2E]">
+                            {q.provider?.name?.slice(0, 1).toUpperCase()}
+                          </div>
+                          <StatusBadge status={q.status} />
+                        </div>
+                        <h4 className="mt-3 font-semibold text-charcoal">{q.provider?.name || "Provider"}</h4>
+                        <div className="mt-3 flex items-baseline gap-1">
+                          <span className="text-2xl font-bold text-charcoal">{money(q.price)}</span>
+                          {q.duration && <span className="text-sm text-sage">/ {q.duration}</span>}
+                        </div>
+                        <dl className="mt-4 space-y-2 text-sm">
+                          {q.numberOfWorkers ? <div className="flex justify-between"><dt className="text-sage">Workers</dt><dd className="font-medium text-charcoal">{q.numberOfWorkers}</dd></div> : null}
+                          {q.sla ? <div className="flex justify-between"><dt className="text-sage">SLA</dt><dd className="font-medium text-charcoal">{q.sla}</dd></div> : null}
+                          {q.expiryDate ? <div className="flex justify-between"><dt className="text-sage">Expires</dt><dd className="font-medium text-charcoal">{dateShort(q.expiryDate)}</dd></div> : null}
+                        </dl>
+                        {q.terms && <p className="mt-3 line-clamp-2 text-xs text-sage">{q.terms}</p>}
+                        <div className="mt-4 flex gap-2 border-t border-border pt-3">
+                          <Button size="sm" className="flex-1" disabled={q.status === "ACCEPTED" || q.status === "REJECTED"} loading={busy === q.id} onClick={() => accept(q.id)}>
+                            {q.status === "ACCEPTED" ? <><Check className="h-4 w-4" /> Selected</> : "Accept quotation"}
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Submit Quotation Modal */}
+      <Modal open={openQuote} onClose={() => setOpenQuote(false)} title={`Quote: ${selectedRequest?.title}`} wide>
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-sage">
+            {selectedRequest?.description}
+            {selectedRequest?.budget && <span className="ml-2 font-medium text-charcoal">Budget: {money(selectedRequest.budget)}</span>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Total price *">
+              <Input type="number" min={0} value={quoteForm.price} onChange={(e) => setQuoteForm({ ...quoteForm, price: e.target.value })} placeholder="5000" />
+            </Field>
+            <Field label="Number of workers">
+              <Input type="number" min={1} value={quoteForm.numberOfWorkers} onChange={(e) => setQuoteForm({ ...quoteForm, numberOfWorkers: e.target.value })} />
+            </Field>
+            <Field label="Labor cost">
+              <Input type="number" min={0} value={quoteForm.laborCost} onChange={(e) => setQuoteForm({ ...quoteForm, laborCost: e.target.value })} placeholder="Optional" />
+            </Field>
+            <Field label="Material cost">
+              <Input type="number" min={0} value={quoteForm.materialCost} onChange={(e) => setQuoteForm({ ...quoteForm, materialCost: e.target.value })} placeholder="Optional" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Duration">
+              <Input value={quoteForm.duration} onChange={(e) => setQuoteForm({ ...quoteForm, duration: e.target.value })} placeholder="e.g. 3 days" />
+            </Field>
+            <Field label="Expiry date">
+              <Input type="date" value={quoteForm.expiryDate} onChange={(e) => setQuoteForm({ ...quoteForm, expiryDate: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="SLA">
+            <Input value={quoteForm.sla} onChange={(e) => setQuoteForm({ ...quoteForm, sla: e.target.value })} placeholder="e.g. 24hr response time" />
+          </Field>
+          <Field label="Warranty">
+            <Input value={quoteForm.warranty} onChange={(e) => setQuoteForm({ ...quoteForm, warranty: e.target.value })} placeholder="e.g. 6 months parts & labor" />
+          </Field>
+          <Field label="Terms & conditions">
+            <Textarea value={quoteForm.terms} onChange={(e) => setQuoteForm({ ...quoteForm, terms: e.target.value })} placeholder="Payment terms, conditions…" />
+          </Field>
+          <Field label="Notes">
+            <Textarea value={quoteForm.notes} onChange={(e) => setQuoteForm({ ...quoteForm, notes: e.target.value })} placeholder="Additional notes for the client…" />
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setOpenQuote(false)}>Cancel</Button>
+            <Button loading={submittingQuote} onClick={submitQuotation}><Send className="h-4 w-4" /> Submit Quotation</Button>
+          </div>
+        </div>
+      </Modal>
+
       {confirmDialog}
     </div>
   );

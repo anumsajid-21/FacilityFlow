@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
@@ -18,17 +18,42 @@ export class QuotationsService {
     const where: any = {};
     if (user.role === "PROVIDER" && user.providerId) {
       where.providerId = user.providerId;
+    } else if (user.role === "HIRING_ORG" && user.hiringOrgId) {
+      // Hiring orgs only ever see quotations belonging to their own requests.
+      where.serviceRequest = { organizationId: user.hiringOrgId, isArchived: false };
     } else if (organizationId) {
-      const reqs = await this.prisma.serviceRequest.findMany({ where: { organizationId, isArchived: false }, select: { id: true } });
-      where.serviceRequestId = { in: reqs.map((r) => r.id) };
+      where.serviceRequest = { organizationId, isArchived: false };
     } else if (providerId) {
       where.providerId = providerId;
     }
     const [total, items] = await Promise.all([
       this.prisma.quotation.count({ where }),
-      this.prisma.quotation.findMany({ where, skip: (q.page - 1) * q.limit, take: q.limit, orderBy: { createdAt: "desc" } }),
+      this.prisma.quotation.findMany({
+        where,
+        skip: (q.page - 1) * q.limit,
+        take: q.limit,
+        orderBy: { createdAt: "desc" },
+        include: { provider: true, serviceRequest: { select: { id: true, title: true, status: true, buildingId: true, budget: true } } },
+      }),
     ]);
     return buildPage(items, total, q.page, q.limit);
+  }
+
+  /** Providers browse all OPEN service requests they can quote on. */
+  async openRequests(user: AuthUser) {
+    if (user.role !== "PROVIDER") throw new ForbiddenException("Only providers can browse open requests");
+    return this.prisma.serviceRequest.findMany({
+      where: { status: "OPEN", isArchived: false },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: {
+        id: true, title: true, description: true, budget: true, priority: true,
+        preferredDate: true, createdAt: true, status: true,
+        building: { select: { name: true, city: true } },
+        category: { select: { name: true } },
+        organization: { select: { name: true } },
+      },
+    });
   }
 
   async forRequest(user: AuthUser, requestId: string) {
@@ -89,6 +114,7 @@ export class QuotationsService {
     const updated = await this.prisma.quotation.update({ where: { id }, data: { status: "SUBMITTED" } });
     await this.prisma.serviceRequest.updateMany({ where: { id: q.serviceRequestId, status: "OPEN" }, data: { status: "QUOTATIONS_RECEIVED" } });
     void this.audit.log({ actorId: user.userId, action: "QUOTATION_SUBMITTED", entityType: "Quotation", entityId: id });
+    void this.notifications.notifyOrganization((q as any).serviceRequest.organizationId, { type: "QUOTATION_RECEIVED", title: "New quotation received", message: `A provider submitted a quotation of ${q.price}.` });
     void this.notifications.notify({ userId: user.userId, type: "QUOTATION_RECEIVED", title: "Quotation submitted", message: "Your quotation has been submitted." });
     return updated;
   }
@@ -129,11 +155,42 @@ export class QuotationsService {
         data: { status: "REJECTED" },
       });
       await tx.serviceRequest.update({ where: { id: q.serviceRequest.id }, data: { status: "PROVIDER_SELECTED" } });
+
+      // Auto-create the contract for the accepted quotation (one per quotation).
+      const existingContract = await tx.contract.findUnique({ where: { quotationId: id } });
+      if (!existingContract) {
+        const start = new Date();
+        const end = new Date();
+        end.setFullYear(end.getFullYear() + 1);
+        const contract = await tx.contract.create({
+          data: {
+            organizationId: q.serviceRequest.organizationId,
+            providerId: q.providerId,
+            serviceRequestId: q.serviceRequest.id,
+            quotationId: id,
+            buildingId: q.serviceRequest.buildingId,
+            serviceName: q.serviceRequest.category?.name ?? q.serviceRequest.title,
+            title: `${q.serviceRequest.category?.name ?? q.serviceRequest.title} - ${q.provider.name}`,
+            price: q.price,
+            startDate: start,
+            endDate: end,
+            sla: q.sla ?? null,
+            status: "ACTIVE",
+          },
+        });
+        const orgUser = await tx.user.findFirst({
+          where: { hiringOrgId: q.serviceRequest.organizationId },
+          select: { id: true },
+        });
+        await tx.contractVersion.create({
+          data: { contractId: contract.id, version: 1, creatorId: orgUser?.id ?? user.userId, snapshot: JSON.stringify(contract) },
+        });
+      }
     });
 
     void this.audit.log({ actorId: user.userId, action: "QUOTATION_ACCEPTED", entityType: "Quotation", entityId: id, details: { requestId: q.serviceRequest.id } });
     const providerUser = await this.prisma.user.findFirst({ where: { providerId: q.providerId }, select: { id: true } });
-    void this.notifications.notify({ userId: providerUser?.id ?? user.userId, type: "PROVIDER_SELECTED", title: "Quotation accepted", message: "Your quotation was accepted." });
+    void this.notifications.notify({ userId: providerUser?.id ?? user.userId, type: "PROVIDER_SELECTED", title: "Quotation accepted", message: "Your quotation was accepted and a contract was created." });
     return { ...q, status: "ACCEPTED" };
   }
 }

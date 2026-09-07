@@ -20,19 +20,20 @@ import { ServiceRequestsService } from './service-requests.service';
 import { MatchingService } from '../matching/matching.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 class ServiceRequestDto {
   @IsString() title: string;
-  @IsOptional() @IsString() categoryId?: string;
+  @IsOptional() @Transform(({ value }) => value === '' || value === null ? undefined : value) @IsUUID() categoryId?: string;
   @IsString() description: string;
   @IsUUID() buildingId: string;
-  @IsOptional() floorId?: string;
-  @IsOptional() areaId?: string;
-  @IsOptional() requirements?: string;
-  @IsOptional() @IsDateString() preferredDate?: string;
-  @IsOptional() frequency?: string;
-  @IsOptional() budget?: number;
-  @IsOptional() priority?: string;
+  @IsOptional() @Transform(({ value }) => value === '' || value === null ? undefined : value) @IsUUID() floorId?: string;
+  @IsOptional() @Transform(({ value }) => value === '' || value === null ? undefined : value) @IsUUID() areaId?: string;
+  @IsOptional() @IsString() requirements?: string;
+  @IsOptional() @Transform(({ value }) => value === '' || value === null ? undefined : value) @IsString() preferredDate?: string;
+  @IsOptional() @IsString() frequency?: string;
+  @IsOptional() @Transform(({ value }) => value === '' || value === null || isNaN(Number(value)) ? undefined : Number(value)) @IsNumber() budget?: number;
+  @IsOptional() @IsString() priority?: string;
   @IsOptional() attachmentIds?: string[];
 }
 

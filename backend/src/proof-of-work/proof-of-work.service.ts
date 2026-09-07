@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
@@ -19,13 +19,14 @@ export class ProofOfWorkService {
     if (!job) throw new NotFoundException("Job not found");
     const isProvider = user.role === "PROVIDER" && user.providerId === job.contract.providerId;
     const isHiring = user.role === "HIRING_ORG" && user.hiringOrgId === job.contract.organizationId;
-    if (!isProvider && !isHiring && user.role !== "ADMIN") throw new ForbiddenException("Access denied");
-    return { job, isProvider, isHiring };
+    const isWorker = user.role === "WORKER" && user.workerId ? (await this.prisma.workerAssignment.count({ where: { jobId: job.id, workerId: user.workerId } })) > 0 : false;
+    if (!isProvider && !isHiring && !isWorker && user.role !== "ADMIN") throw new ForbiddenException("Access denied");
+    return { job, isProvider, isHiring, isWorker };
   }
 
   async add(user: AuthUser, jobId: string, dto: any, beforePhotoIds: string[], afterPhotoIds: string[]) {
-    const { job, isProvider } = await this.loadJob(user, jobId);
-    if (!isProvider) throw new ForbiddenException("Only the provider can add proof of work");
+    const { job, isProvider, isWorker } = await this.loadJob(user, jobId);
+    if (!isProvider && !isWorker) throw new ForbiddenException("Only the assigned provider or worker can add proof of work");
     if (job.status !== "IN_PROGRESS") throw new BadRequestException("Job must be in progress to add proof");
     const existing = await this.prisma.proofOfWork.findFirst({ where: { jobId } });
     const data: any = {

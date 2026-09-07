@@ -2,8 +2,8 @@
 import React from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText, Quote, FileSignature, HardHat, AlertTriangle, Clock, ArrowRight, Star, TrendingUp, Briefcase } from "lucide-react";
-import { analyticsApi } from "@/services/api";
+import { FileText, Quote, FileSignature, HardHat, AlertTriangle, Clock, ArrowRight, Star, TrendingUp, Briefcase, Users, Building2, Activity } from "lucide-react";
+import { analyticsApi, adminApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, CardHeader } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,13 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
-  useEffect(() => { analyticsApi.dashboard().then(setData).catch((e: any) => setError(e?.message || "Failed to load")); }, []);
+  useEffect(() => {
+    if (user?.role === "ADMIN") {
+      adminApi.dashboard().then(setData).catch((e: any) => setError(e?.message || "Failed to load"));
+    } else {
+      analyticsApi.dashboard().then(setData).catch((e: any) => setError(e?.message || "Failed to load"));
+    }
+  }, [user?.role]);
   if (!data && !error) {
     return (
       <div className="space-y-5">
@@ -35,12 +41,76 @@ export default function DashboardPage() {
     );
   }
   if (error || !data) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Unable to load dashboard. Please refresh.</div>;
+  if (user?.role === "ADMIN") return <AdminCockpit data={data} />;
   return user?.role === "PROVIDER" ? <ProviderCockpit data={data} name={user.name} /> : <HiringCockpit data={data} />;
+}
+
+function AdminCockpit({ data }: { data: any }) {
+  return (
+    <div className="space-y-6">
+      <div><h1 className="text-2xl font-bold text-charcoal">Admin Dashboard</h1><p className="mt-1 text-sm text-sage">Overview of the entire FacilityFlow platform.</p></div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KPI label="Organizations" value={data.totalOrganizations} icon={<Building2 className="h-4 w-4 text-pine" />} accent="bg-pine/10" />
+        <KPI label="Providers" value={data.totalProviders} icon={<Users className="h-4 w-4 text-brass" />} accent="bg-brass-soft" />
+        <KPI label="Service Requests" value={data.totalServiceRequests} icon={<FileText className="h-4 w-4 text-terracotta" />} accent="bg-terracotta-soft" />
+        <KPI label="Active Contracts" value={data.activeContracts} icon={<FileSignature className="h-4 w-4 text-pine" />} accent="bg-pine/10" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Recent Organizations" />
+          <div className="space-y-2 p-2">
+            {data.recentOrganizations?.length === 0 ? <p className="px-3 py-6 text-center text-sm text-sage">No organizations yet.</p> : data.recentOrganizations?.map((org: any) => (
+              <div key={org.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-charcoal">
+                <Building2 className="h-4 w-4 text-pine" />
+                <span className="flex-1">{org.name}</span>
+                <span className="text-xs text-sage">{org.members?.length ?? 0} members</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Recent Providers" />
+          <div className="space-y-2 p-2">
+            {data.recentProviders?.length === 0 ? <p className="px-3 py-6 text-center text-sm text-sage">No providers yet.</p> : data.recentProviders?.map((p: any) => (
+              <div key={p.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-charcoal">
+                <Users className="h-4 w-4 text-brass" />
+                <span className="flex-1">{p.name}</span>
+                <span className="text-xs text-sage">{p.verificationStatus}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Recent Service Requests" />
+          <div className="space-y-2 p-2">
+            {data.recentServiceRequests?.length === 0 ? <p className="px-3 py-6 text-center text-sm text-sage">No service requests yet.</p> : data.recentServiceRequests?.map((r: any) => (
+              <Link key={r.id} href={`/service-requests/${r.id}`} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-charcoal transition-colors hover:bg-muted">
+                <FileText className="h-4 w-4 text-terracotta" />
+                <span className="flex-1">{r.title}</span>
+                <span className="text-xs text-sage">{r.organization?.name}</span>
+              </Link>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Quick Actions" />
+          <div className="grid grid-cols-2 gap-2 p-4">
+            <Link href="/providers"><Button variant="outline" className="w-full">View Providers</Button></Link>
+            <Link href="/service-requests"><Button variant="outline" className="w-full">View Requests</Button></Link>
+            <Link href="/facilities"><Button variant="outline" className="w-full">View Buildings</Button></Link>
+            <Link href="/contracts"><Button variant="outline" className="w-full">View Contracts</Button></Link>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 function ProviderCockpit({ data, name }: { data: any; name: string }) {
   const kpis = [
-    { label: "Average rating", value: data.averageRating ? `${data.averageRating.toFixed(1)} stars` : "—", hint: `${data.totalReviews} reviews`, icon: <Star className="h-4 w-4 text-brass" />, accent: "bg-brass-soft" },
+    { label: "Average rating", value: data.averageRating ? `${data.averageRating.toFixed(1)} stars` : "", hint: `${data.totalReviews} reviews`, icon: <Star className="h-4 w-4 text-brass" />, accent: "bg-brass-soft" },
     { label: "Revenue", value: money(data.revenue), icon: <TrendingUp className="h-4 w-4 text-pine" />, accent: "bg-pine/10" },
     { label: "Active contracts", value: data.activeContracts, icon: <FileSignature className="h-4 w-4 text-pine" />, accent: "bg-pine/10" },
     { label: "Upcoming jobs", value: data.upcomingJobs, icon: <HardHat className="h-4 w-4 text-terracotta" />, accent: "bg-terracotta-soft" },

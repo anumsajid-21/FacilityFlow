@@ -1,6 +1,6 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
-export type Role = 'HIRING_ORG' | 'PROVIDER' | 'ADMIN';
+export type Role = 'HIRING_ORG' | 'PROVIDER' | 'ADMIN' | 'WORKER';
 
 /**
  * The authenticated principal attached to requests by JwtStrategy.
@@ -12,6 +12,7 @@ export interface AuthUser {
   role: Role;
   hiringOrgId: string | null;
   providerId: string | null;
+  workerId?: string | null;
   isActive: boolean;
 }
 

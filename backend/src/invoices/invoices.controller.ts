@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, ParseUUIDPipe } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards, ParseUUIDPipe } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -33,6 +33,11 @@ export class InvoicesController {
   @Get(":id")
   get(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.is.get(user, id);
+  }
+
+  @Get(":id/pdf")
+  downloadPdf(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string, @Res() res: any) {
+    return this.is.generatePdf(user, id, res);
   }
 
   @Post(":id/payments")

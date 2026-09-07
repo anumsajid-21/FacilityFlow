@@ -1,10 +1,11 @@
 /**
  * Development database helper using embedded PostgreSQL binaries.
  *
- * Docker is the default runtime for this project (see docker-compose.yml).
- * This script is a fallback for machines where Docker is unavailable,
- * providing a self-contained PostgreSQL instance for local development
- * and automated tests — with no external service or admin rights required.
+ * This is the default (and only) database runtime for this project.
+ * Docker has been removed from the project — it was crashing on this
+ * machine. This script provides a self-contained PostgreSQL instance
+ * for local development and automated tests — with no external
+ * service, Docker, or admin rights required.
  *
  * Usage:
  *   node scripts/dev-db.mjs start   [--port 5432]
