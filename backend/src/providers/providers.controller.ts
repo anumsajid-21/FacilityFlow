@@ -21,7 +21,7 @@ import { AuditService } from '../audit/audit.service';
 import { ProvidersService } from './providers.service';
 import { FilesService } from '../files/files.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { IsOptional, IsString, IsInt, IsArray } from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsInt, IsArray } from 'class-validator';
 
 class ProviderProfileDto {
   @IsOptional() name?: string;
@@ -40,6 +40,7 @@ class ProviderProfileDto {
 class VerificationDocumentDto {
   @IsString() documentType: string;
   @IsString() fileId: string; // UUID from Files upload
+  @IsOptional() @IsDateString() expiresAt?: string;
 }
 
 /**

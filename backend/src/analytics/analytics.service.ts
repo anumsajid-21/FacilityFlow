@@ -62,5 +62,64 @@ export class AnalyticsService {
       totalReviews,
     };
   }
+
+  async spend(user: AuthUser, from?: string, to?: string) {
+    const where: any = { status: { in: ["ISSUED", "PENDING", "PAID", "OVERDUE"] } };
+    if (user.role === "HIRING_ORG") where.organizationId = user.hiringOrgId;
+    const start = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 365));
+    const end = to ? new Date(to) : new Date();
+    if (!isNaN(start.getTime())) where.createdAt = { gte: start };
+    if (!isNaN(end.getTime())) where.createdAt = { ...(where.createdAt ?? {}), lte: end };
+    const invoices = await this.prisma.invoice.findMany({
+      where,
+      include: { provider: { select: { id: true, name: true } }, contract: { select: { serviceName: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const byMonth = new Map<string, number>();
+    const byProvider = new Map<string, { name: string; amount: number }>();
+    const byCategory = new Map<string, number>();
+    for (const invoice of invoices) {
+      const amount = Number(invoice.total);
+      const month = invoice.createdAt.toISOString().slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) ?? 0) + amount);
+      const provider = byProvider.get(invoice.providerId) ?? { name: invoice.provider.name, amount: 0 };
+      provider.amount += amount;
+      byProvider.set(invoice.providerId, provider);
+      const category = invoice.contract.serviceName ?? "Other";
+      byCategory.set(category, (byCategory.get(category) ?? 0) + amount);
+    }
+    const scorecards = await this.providerScorecards(user);
+    return {
+      from: start.toISOString(),
+      to: end.toISOString(),
+      monthly: [...byMonth.entries()].map(([period, amount]) => ({ period, amount: Number(amount.toFixed(2)) })),
+      byProvider: [...byProvider.entries()].map(([id, value]) => ({ id, ...value, amount: Number(value.amount.toFixed(2)) })),
+      byCategory: [...byCategory.entries()].map(([category, amount]) => ({ category, amount: Number(amount.toFixed(2)) })),
+      scorecards,
+    };
+  }
+
+  async providerScorecards(user: AuthUser) {
+    const where: any = user.role === "HIRING_ORG" ? { organizationId: user.hiringOrgId } : {};
+    const providers = await this.prisma.provider.findMany({ where: user.role === "HIRING_ORG" && user.hiringOrgId ? { contracts: { some: { organizationId: user.hiringOrgId } } } : {}, select: { id: true, name: true } });
+    return Promise.all(providers.map(async (provider) => {
+      const [rating, jobs, rework, sla] = await Promise.all([
+        this.prisma.review.aggregate({ where: { providerId: provider.id, ...(where.organizationId ? { organizationId: where.organizationId } : {}) }, _avg: { overallRating: true } }),
+        this.prisma.job.count({ where: { contract: { providerId: provider.id, ...(where.organizationId ? { organizationId: where.organizationId } : {}) } } }),
+        this.prisma.reworkRequest.count({ where: { job: { contract: { providerId: provider.id, ...(where.organizationId ? { organizationId: where.organizationId } : {}) } } } }),
+        this.prisma.jobSla.count({ where: { job: { contract: { providerId: provider.id, ...(where.organizationId ? { organizationId: where.organizationId } : {}) } }, status: "BREACHED" } }),
+      ]);
+      return { ...provider, averageRating: Number((rating._avg.overallRating ?? 0).toFixed(1)), jobs, rework, slaBreaches: sla, reworkRate: jobs ? Number(((rework / jobs) * 100).toFixed(1)) : 0 };
+    }));
+  }
+
+  async exportCsv(user: AuthUser, from?: string, to?: string) {
+    const data = await this.spend(user, from, to);
+    const rows = [["period", "amount"], ...data.monthly.map((row) => [row.period, String(row.amount)])];
+    return rows.map((row) => row.map(csvEscape).join(",")).join("\r\n") + "\r\n";
+  }
 }
 
+function csvEscape(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}

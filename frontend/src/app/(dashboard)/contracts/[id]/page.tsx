@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Calendar, DollarSign, HardHat, FileSignature } from "lucide-react";
-import { contractsApi, jobsApi } from "@/services/api";
+import { contractsApi, jobsApi, recurringApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, Loading, StatusBadge, Modal, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,13 @@ export default function ContractDetailPage() {
   const [openCreateJob, setOpenCreateJob] = useState(false);
   const [busy, setBusy] = useState(false);
   const [jobForm, setJobForm] = useState({ title: "", date: "", startTime: "", endTime: "", instructions: "" });
+  const [schedule, setSchedule] = useState<any>(null);
+  const [scheduleForm, setScheduleForm] = useState({ frequency: "MONTHLY", startsAt: "" });
 
   useEffect(() => {
     contractsApi.get(id).then(setContract).catch(() => setContract(undefined));
     jobsApi.list({ limit: 100 }).then((p) => setJobs(p.data.filter((j: any) => j.contractId === id))).catch(() => setJobs([]));
+    recurringApi.get(id).then(setSchedule).catch(() => setSchedule(null));
   }, [id]);
 
   const isHiring = user?.role === "HIRING_ORG" || user?.role === "ADMIN";
@@ -38,6 +41,11 @@ export default function ContractDetailPage() {
       setJobs(updated.data.filter((j: any) => j.contractId === id));
     } catch (e: any) { toast.error("Failed", e?.message || "Could not create job"); } finally { setBusy(false); }
   };
+  const saveSchedule = async () => {
+    if (!scheduleForm.startsAt) return toast.error("Required", "Choose the first run date.");
+    try { setSchedule(await recurringApi.save(id, { ...scheduleForm, startsAt: new Date(scheduleForm.startsAt).toISOString() })); toast.success("Schedule saved"); } catch (e: any) { toast.error("Failed", e?.message || "Could not save schedule"); }
+  };
+  const toggleSchedule = async () => { try { setSchedule(await recurringApi.pause(id, !schedule?.paused)); } catch (e: any) { toast.error("Failed", e?.message || "Could not update schedule"); } };
 
   if (contract === undefined) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Contract not found.</div>;
   if (!contract) return <Loading />;
@@ -67,6 +75,7 @@ export default function ContractDetailPage() {
           {isHiring && contract.status === "ACTIVE" && <Button className="mt-4 w-full" onClick={() => setOpenCreateJob(true)}><HardHat className="h-4 w-4" /> Create Job</Button>}
         </Card>
       </div>
+      {contract.status === "ACTIVE" && <Card className="p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold text-charcoal">Recurring schedule</h3><p className="text-xs text-sage">{schedule ? `${schedule.frequency} · next run ${dateShort(schedule.nextRunAt)}${schedule.paused ? " · paused" : ""}` : "Automatically generate jobs for this contract."}</p></div>{schedule && <Button variant="outline" size="sm" onClick={toggleSchedule}>{schedule.paused ? "Resume" : "Pause"}</Button>}</div>{!schedule && <div className="mt-4 flex flex-wrap items-end gap-3"><Field label="Frequency"><select className="h-10 rounded-lg border border-input bg-ivory px-3 text-sm" value={scheduleForm.frequency} onChange={(e) => setScheduleForm({ ...scheduleForm, frequency: e.target.value })}><option>DAILY</option><option>WEEKLY</option><option>MONTHLY</option><option>QUARTERLY</option></select></Field><Field label="First run"><Input type="date" value={scheduleForm.startsAt} onChange={(e) => setScheduleForm({ ...scheduleForm, startsAt: e.target.value })} /></Field><Button onClick={saveSchedule}>Enable schedule</Button></div>}</Card>}
       <Card>
         <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Jobs ({jobs.length})</h3></div>
         {jobs.length === 0 ? (

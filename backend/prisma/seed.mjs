@@ -1,14 +1,9 @@
 /**
  * FacilityFlow database seed.
  *
- * Seeds only platform infrastructure data:
- *   - The 8 default service categories
- *   - Default checklist templates per service category
- *   - Secure demo accounts (passwords are hashed, never plaintext)
- *
- * It intentionally does NOT create business records (buildings, requests,
- * quotations, contracts ...) — those must be created through the real
- * application workflows so dashboards always reflect genuine data.
+ * Seeds platform infrastructure plus a realistic, repeatable demo workspace.
+ * Passwords are hashed before persistence; the credential table printed at the
+ * end is intended for local/demo environments only.
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -385,17 +380,144 @@ async function seedBusinessData(org, providers, categories) {
   console.log('Seed complete: demo buildings, requests, quotations, contract and jobs created.');
 }
 
+const DEMO_WORKERS = [
+  { email: 'worker1@facilityflow.app', password: 'Worker123!', name: 'Alex Rivera', skills: 'Commercial cleaning, floor care', certifications: 'OSHA 10', providerIndex: 2 },
+  { email: 'worker2@facilityflow.app', password: 'Worker123!', name: 'Jordan Lee', skills: 'HVAC, preventive maintenance', certifications: 'EPA 608', providerIndex: 1 },
+  { email: 'worker3@facilityflow.app', password: 'Worker123!', name: 'Sam Patel', skills: 'Electrical, safety inspections', certifications: 'Licensed electrician', providerIndex: 0 },
+  { email: 'worker4@facilityflow.app', password: 'Worker123!', name: 'Taylor Morgan', skills: 'Plumbing, general maintenance', certifications: 'OSHA 10', providerIndex: 0 },
+];
+
+async function seedWorkers(providers) {
+  const workers = [];
+  for (const w of DEMO_WORKERS) {
+    const provider = providers[w.providerIndex % providers.length];
+    let worker = await prisma.worker.findUnique({ where: { email: w.email } });
+    if (!worker) {
+      worker = await prisma.worker.create({
+        data: { providerId: provider.id, name: w.name, email: w.email, skills: w.skills, certifications: w.certifications, availability: 'Mon-Fri 08:00-17:00', inviteStatus: 'ACCEPTED' },
+      });
+    }
+    let user = await prisma.user.findUnique({ where: { email: w.email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: { email: w.email, password: await bcrypt.hash(w.password, 12), name: w.name, role: 'WORKER', providerId: provider.id, isActive: true },
+      });
+      await prisma.worker.update({ where: { id: worker.id }, data: { userId: user.id } });
+    } else if (worker.userId !== user.id) {
+      await prisma.worker.update({ where: { id: worker.id }, data: { userId: user.id } });
+    }
+    workers.push(worker);
+  }
+  return workers;
+}
+
+async function seedExtendedBusiness(org, providers, workers) {
+  const contract = await prisma.contract.findFirst({ where: { organizationId: org.id, title: { contains: 'Commercial Cleaning' } }, include: { jobs: true } });
+  if (!contract) return;
+  const jobs = contract.jobs;
+  const job = jobs[0];
+  if (job && workers[0]) {
+    await prisma.workerAssignment.upsert({
+      where: { jobId_workerId: { jobId: job.id, workerId: workers[0].id } },
+      update: {},
+      create: { jobId: job.id, workerId: workers[0].id },
+    });
+  }
+  const policyByProvider = new Map();
+  for (const provider of providers) {
+    let policy = await prisma.slaPolicy.findFirst({ where: { providerId: provider.id, name: 'Standard demo SLA' } });
+    if (!policy) policy = await prisma.slaPolicy.create({ data: { providerId: provider.id, name: 'Standard demo SLA', responseHours: 4, resolutionHours: 48, warningHours: 8 } });
+    policyByProvider.set(provider.id, policy);
+  }
+  for (const j of jobs) {
+    const policy = policyByProvider.get(contract.providerId);
+    await prisma.jobSla.upsert({ where: { jobId: j.id }, update: { policyId: policy?.id }, create: { jobId: j.id, policyId: policy?.id, deadline: new Date(j.startTime.getTime() + 48 * 3600000) } });
+  }
+  // A second provider contract gives the demo dashboard a useful comparison.
+  const hvacRequest = await prisma.serviceRequest.findFirst({ where: { organizationId: org.id, title: 'Quarterly HVAC maintenance' } });
+  if (hvacRequest && providers[0]) {
+    const hvacQuote = await prisma.quotation.findFirst({ where: { serviceRequestId: hvacRequest.id, providerId: providers[0].id } });
+    if (hvacQuote) {
+      await prisma.quotation.update({ where: { id: hvacQuote.id }, data: { status: 'ACCEPTED' } });
+      let hvacContract = await prisma.contract.findFirst({ where: { quotationId: hvacQuote.id } });
+      if (!hvacContract) {
+        hvacContract = await prisma.contract.create({ data: { organizationId: org.id, providerId: providers[0].id, serviceRequestId: hvacRequest.id, quotationId: hvacQuote.id, buildingId: hvacRequest.buildingId, serviceName: 'HVAC/AC', title: 'HVAC Preventive Maintenance - Demo', price: 2200, startDate: new Date(), endDate: new Date(Date.now() + 365 * 864e5), sla: 'Resolution within 48 hours', status: 'ACTIVE' } });
+      }
+      const hvacJob = await prisma.job.findFirst({ where: { contractId: hvacContract.id } }) || await prisma.job.create({ data: { contractId: hvacContract.id, buildingId: hvacRequest.buildingId, floorId: hvacRequest.floorId, areaId: hvacRequest.areaId, title: 'Quarterly HVAC inspection', location: 'HQ Tower - Server Room', date: new Date(Date.now() + 10 * 864e5), startTime: new Date(Date.now() + 10 * 864e5), endTime: new Date(Date.now() + 10 * 864e5 + 4 * 3600000), serviceName: 'HVAC/AC', status: 'SCHEDULED' } });
+      const hvacPolicy = policyByProvider.get(providers[0].id);
+      await prisma.jobSla.upsert({ where: { jobId: hvacJob.id }, update: { policyId: hvacPolicy?.id }, create: { jobId: hvacJob.id, policyId: hvacPolicy?.id, deadline: new Date(hvacJob.startTime.getTime() + 48 * 3600000) } });
+      await prisma.invoice.upsert({ where: { invoiceNumber: 'DEMO-0002' }, update: {}, create: { invoiceNumber: 'DEMO-0002', providerId: providers[0].id, organizationId: org.id, contractId: hvacContract.id, jobId: hvacJob.id, amount: 2200, tax: 220, discount: 0, total: 2420, dueDate: new Date(Date.now() + 21 * 864e5), status: 'PENDING' } });
+    }
+  }
+  await prisma.contractSchedule.upsert({
+    where: { contractId: contract.id },
+    update: {},
+    create: { contractId: contract.id, frequency: 'MONTHLY', startsAt: new Date(Date.now() + 30 * 864e5), nextRunAt: new Date(Date.now() + 30 * 864e5), occurrencesLimit: 12 },
+  });
+  if (job) {
+    await prisma.invoice.upsert({
+      where: { invoiceNumber: 'DEMO-0001' },
+      update: {},
+      create: { invoiceNumber: 'DEMO-0001', providerId: contract.providerId, organizationId: org.id, contractId: contract.id, jobId: job.id, amount: 750, tax: 75, discount: 0, total: 825, dueDate: new Date(Date.now() + 14 * 864e5), status: 'ISSUED' },
+    });
+    await prisma.review.upsert({
+      where: { organizationId_providerId_jobId: { organizationId: org.id, providerId: contract.providerId, jobId: job.id } },
+      update: {},
+      create: { organizationId: org.id, providerId: contract.providerId, jobId: job.id, quality: 5, timeliness: 4, professionalism: 5, value: 4, overallRating: 4.5, comments: 'Reliable team with excellent communication and finish quality.' },
+    });
+  }
+
+  async function seedSecondOrganization(categories) {
+    const categoryId = categories.get('Electrical');
+    let org = await prisma.organization.findFirst({ where: { name: 'Enterprise Campus Group' } });
+    if (!org) org = await prisma.organization.create({ data: { name: 'Enterprise Campus Group', description: 'Multi-site corporate campus demo tenant', contactEmail: 'ops@enterprise-campus.test' } });
+    let user = await prisma.user.findUnique({ where: { email: 'ops@facilityflow.app' } });
+    if (!user) {
+      user = await prisma.user.create({ data: { email: 'ops@facilityflow.app', password: await bcrypt.hash('Hire@12345', 12), name: 'Enterprise Operations Lead', role: 'HIRING_ORG', hiringOrgId: org.id } });
+      await prisma.organizationMember.create({ data: { organizationId: org.id, userId: user.id, role: 'ADMIN' } });
+    }
+    let building = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'Campus One' } });
+    if (!building) {
+      building = await prisma.building.create({ data: { organizationId: org.id, name: 'Campus One', address: '500 Innovation Way', city: 'Austin', buildingType: 'Campus', numberOfFloors: 3 } });
+      const floor = await prisma.floor.create({ data: { buildingId: building.id, name: 'Main Level' } });
+      const area = await prisma.area.create({ data: { floorId: floor.id, name: 'Electrical Room', category: 'Equipment room' } });
+      await prisma.serviceRequest.create({ data: { organizationId: org.id, createdById: user.id, categoryId, title: 'Campus electrical safety inspection', description: 'Annual inspection of panels and emergency lighting.', buildingId: building.id, floorId: floor.id, areaId: area.id, budget: 1800, priority: 'NORMAL', status: 'OPEN' } });
+    }
+    return org;
+  }
+  const providerUser = await prisma.user.findFirst({ where: { providerId: contract.providerId, role: 'PROVIDER' } });
+  const orgUser = await prisma.user.findFirst({ where: { hiringOrgId: org.id } });
+  if (providerUser && orgUser) {
+    const existing = await prisma.messageThread.findFirst({ where: { organizationId: org.id, providerId: contract.providerId, subject: 'Demo contract coordination' } });
+    if (!existing) {
+      await prisma.messageThread.create({
+        data: { organizationId: org.id, providerId: contract.providerId, contractId: contract.id, subject: 'Demo contract coordination', createdById: orgUser.id, messages: { create: [{ senderId: orgUser.id, body: 'Welcome! Please confirm the next lobby cleaning date.' }, { senderId: providerUser.id, body: 'Confirmed. Our team will arrive at 9:00 AM.' }] } },
+      });
+    }
+  }
+}
+
 async function main() {
   const categories = await seedCategories();
   await seedChecklists(categories);
   await seedDemoUsers();
   const providers = await seedDemoProviders(categories);
+  const workers = await seedWorkers(providers);
   // Attach demo business data to the demo hiring organization
   const org = await prisma.organization.findFirst({ where: { name: 'Demo Facilities Co' } });
   if (org) {
     await seedBusinessData(org, providers, categories);
+    await seedExtendedBusiness(org, providers, workers);
   }
-  console.log('Seed complete: categories, checklist templates and demo accounts are ready.');
+  await seedSecondOrganization(categories);
+  console.log('\nDemo credentials');
+  console.table([
+    ...DEMO_USERS.map(({ email, password, role }) => ({ role, email, password })),
+    { role: 'HIRING_ORG', email: 'ops@facilityflow.app', password: 'Hire@12345' },
+    ...DEMO_PROVIDERS.filter((p, i) => i > 0).map(({ email, password }) => ({ role: 'PROVIDER', email, password })),
+    ...DEMO_WORKERS.map(({ email, password }) => ({ role: 'WORKER', email, password })),
+  ]);
+  console.log('Seed complete: categories, checklists, demo organizations/providers/workers and business workflows are ready.');
 }
 
 main()

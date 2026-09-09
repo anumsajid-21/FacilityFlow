@@ -4,6 +4,7 @@ import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
 import { PaginationDto, buildPage } from "../common/dto/pagination.dto";
 import { NotificationsService } from "../notifications/notifications.service";
+import { SlaService } from "../sla/sla.service";
 
 export interface ProviderFilter {
   categoryId?: string;
@@ -19,6 +20,7 @@ export class ProvidersService {
     private prisma: PrismaService,
     private audit: AuditService,
     private notifications: NotificationsService,
+    private sla: SlaService,
   ) {}
 
   async publicList(filter: ProviderFilter, q: PaginationDto) {
@@ -46,10 +48,11 @@ export class ProvidersService {
 
   async getOne(user: AuthUser, id: string) {
     if (user.providerId !== id) throw new ForbiddenException("You can only view your own provider profile");
-    return this.prisma.provider.findUnique({
+    const profile = await this.prisma.provider.findUnique({
       where: { id },
       include: { services: { include: { category: true } }, serviceAreas: true, documents: true },
     });
+    return profile ? { ...profile, slaScore: await this.sla.providerScore(id) } : profile;
   }
 
   async getPublic(id: string) {
@@ -58,7 +61,7 @@ export class ProvidersService {
       include: { services: { include: { category: true } }, serviceAreas: true },
     });
     if (!provider) throw new NotFoundException("Provider not found");
-    return provider;
+    return { ...provider, slaScore: await this.sla.providerScore(id) };
   }
 
   async update(user: AuthUser, id: string, dto: any) {
@@ -89,7 +92,7 @@ export class ProvidersService {
     return this.prisma.verificationDocument.findMany({ where: { providerId: id }, orderBy: { createdAt: "desc" } });
   }
 
-  async addDocument(user: AuthUser, id: string, dto: { documentType: string; fileId: string }) {
+  async addDocument(user: AuthUser, id: string, dto: { documentType: string; fileId: string; expiresAt?: string }) {
     if (user.providerId !== id) throw new ForbiddenException("Not your profile");
     const provider = await this.prisma.provider.findUnique({ where: { id } });
     if (!provider) throw new NotFoundException("Provider not found");
@@ -97,12 +100,38 @@ export class ProvidersService {
     const file = await this.prisma.file.findUnique({ where: { id: dto.fileId } });
     if (!file) throw new BadRequestException("File not found");
     const doc = await this.prisma.verificationDocument.create({
-      data: { providerId: id, documentType: dto.documentType, fileId: dto.fileId, status: "PENDING" },
+      data: { providerId: id, documentType: dto.documentType, fileId: dto.fileId, status: "PENDING", expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null, resubmittedAt: new Date() },
     });
     void this.audit.log({ actorId: user.userId, action: "DOCUMENT_SUBMITTED", entityType: "VerificationDocument", entityId: doc.id, details: { documentType: dto.documentType } });
     // Re-evaluate verification status
     await this.recomputeStatus(id);
     return doc;
+  }
+
+  async verificationQueue() {
+    await this.prisma.verificationDocument.updateMany({
+      where: { expiresAt: { lt: new Date() }, status: "APPROVED" },
+      data: { status: "EXPIRED" },
+    });
+    return this.prisma.verificationDocument.findMany({
+      where: { status: { in: ["PENDING", "RESUBMITTED", "EXPIRED"] } },
+      orderBy: { createdAt: "asc" },
+      include: { provider: { select: { id: true, name: true, verificationStatus: true } }, file: true },
+    });
+  }
+
+  async bulkReview(ids: string[], status: "APPROVED" | "REJECTED", notes: string | undefined, adminUserId: string) {
+    if (!ids.length) throw new BadRequestException("At least one document is required");
+    const results = [];
+    for (const id of ids) {
+      const doc = await this.prisma.verificationDocument.findUnique({ where: { id } });
+      if (!doc) continue;
+      await this.prisma.verificationDocument.update({ where: { id }, data: { status, reviewNotes: notes, reviewedById: adminUserId, reviewedAt: new Date() } });
+      await this.recomputeStatus(doc.providerId);
+      results.push(id);
+    }
+    void this.audit.log({ actorId: adminUserId, action: "DOCUMENTS_BULK_REVIEWED", entityType: "VerificationDocument", details: { ids: results, status, notes } });
+    return { updated: results.length, ids: results };
   }
 
   /** Admin review of a verification document */

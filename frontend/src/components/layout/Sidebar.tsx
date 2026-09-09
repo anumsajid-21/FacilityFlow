@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building2, FileText, Users, Quote, FileSignature,
   HardHat, ReceiptText, Star, Settings, LogOut, Menu, X, ChevronLeft, UserCheck,
-  Bell, Shield,
+  Bell, Shield, MessageCircle, BarChart3,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { messagingApi } from "@/services/api";
 import { cn } from "@/lib/utils";
 
 const ALL_NAV = [
@@ -23,7 +24,10 @@ const ALL_NAV = [
   { href: "/invoices", label: "Invoices", icon: ReceiptText, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/reviews", label: "Reviews", icon: Star, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/notifications", label: "Notifications", icon: Bell, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
+  { href: "/messages", label: "Messages", icon: MessageCircle, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, roles: ["HIRING_ORG", "ADMIN"] },
   { href: "/admin", label: "Admin", icon: Shield, roles: ["ADMIN"] },
+  { href: "/admin/verification", label: "Verification queue", icon: Shield, roles: ["ADMIN"] },
   { href: "/settings", label: "Settings", icon: Settings, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
 ];
 
@@ -33,9 +37,15 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   const role = user?.role ?? "HIRING_ORG";
   const nav = ALL_NAV.filter((n) => (n.roles as string[]).includes(role));
+  useEffect(() => {
+    if (role === "HIRING_ORG" || role === "PROVIDER" || role === "ADMIN") {
+      messagingApi.threads().then((result) => setUnreadMessages(Number(result?.unreadCount ?? 0))).catch(() => setUnreadMessages(0));
+    }
+  }, [role]);
 
   const logoutAndGo = () => {
     logout();
@@ -71,7 +81,7 @@ export function Sidebar() {
               title={item.label}
             >
               <Icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-brass" : "text-sand/60 group-hover:text-brass")} />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
+              {!isCollapsed && <span className="flex min-w-0 flex-1 items-center justify-between gap-2 truncate"><span className="truncate">{item.label}</span>{item.href === "/messages" && unreadMessages > 0 && <span className="rounded-full bg-terracotta px-1.5 text-[10px] text-ivory">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}</span>}
             </Link>
           );
         })}

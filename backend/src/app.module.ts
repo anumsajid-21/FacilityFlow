@@ -25,6 +25,9 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AdminModule } from './admin/admin.module';
 import { SettingsModule } from './settings/settings.module';
+import { MessagingModule } from './messaging/messaging.module';
+import { SlaModule } from './sla/sla.module';
+import { RecurringModule } from './recurring/recurring.module';
 
 @Global()
 @Module({
@@ -59,6 +62,9 @@ export class GlobalPassportModule {}
     ReviewsModule,
     AnalyticsModule,
     AdminModule,
+    MessagingModule,
+    SlaModule,
+    RecurringModule,
   ],
   controllers: [AppController],
   providers: [AppService],

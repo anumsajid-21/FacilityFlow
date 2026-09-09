@@ -4,6 +4,7 @@ import { AuditService } from "../audit/audit.service";
 import { AuthUser } from "../common/decorators/user.decorator";
 import { PaginationDto, buildPage } from "../common/dto/pagination.dto";
 import { NotificationsService } from "../notifications/notifications.service";
+import { SlaService } from "../sla/sla.service";
 
 
 /**
@@ -12,7 +13,7 @@ import { NotificationsService } from "../notifications/notifications.service";
  */
 @Injectable()
 export class JobsService {
-  constructor(private prisma: PrismaService, private audit: AuditService, private notifications: NotificationsService) {}
+  constructor(private prisma: PrismaService, private audit: AuditService, private notifications: NotificationsService, private sla: SlaService) {}
 
   private async load(user: AuthUser, id: string) {
     const job = await this.prisma.job.findUnique({ where: { id }, include: { contract: { include: { organization: true, provider: true } } } });
@@ -38,7 +39,7 @@ export class JobsService {
     }
     const [total, items] = await Promise.all([
       this.prisma.job.count({ where }),
-      this.prisma.job.findMany({ where, skip: (q.page - 1) * q.limit, take: q.limit, orderBy: { date: "desc" } }),
+      this.prisma.job.findMany({ where, skip: (q.page - 1) * q.limit, take: q.limit, orderBy: { date: "desc" }, include: { contract: { select: { provider: { select: { name: true } }, organization: { select: { name: true } } } }, sla: true } }),
     ]);
     return buildPage(items, total, q.page, q.limit);
   }
@@ -68,6 +69,7 @@ export class JobsService {
     });
     void this.audit.log({ actorId: user.userId, action: "JOB_CREATED", entityType: "Job", entityId: job.id, details: dto });
     void this.notifications.notify({ userId: user.userId, type: "JOB_SCHEDULED", title: "Job scheduled", message: `${dto.title} was scheduled.` });
+    await this.sla.createForJob(job.id);
     return job;
   }
 
@@ -94,6 +96,7 @@ export class JobsService {
         approvals: true,
         reworkRequests: { include: { requester: true } },
         invoices: true,
+        sla: { include: { policy: true } },
       },
     });
   }
@@ -116,6 +119,7 @@ export class JobsService {
       await tx.approval.create({ data: { jobId: job.id, decision: "APPROVED", approvedByUserId: user.userId, notes: "auto-created on completion" } });
       await this.notifications.notifyOrganization(job.contract.organizationId, { type: "JOB_COMPLETED", title: "Job completed", message: `${job.title ?? "Job"} was marked complete and is awaiting your approval.` });
       await this.notifications.notify({ userId: user.userId, type: "JOB_COMPLETED", title: "Job completed", message: "Job marked complete, awaiting approval." });
+      await this.sla.complete(job.id);
       return rec;
     });
     void this.audit.log({ actorId: user.userId, action: "JOB_COMPLETED", entityType: "Job", entityId: id });
@@ -175,5 +179,3 @@ export class JobsService {
     return contracts.map((c) => c.id);
   }
 }
-
-

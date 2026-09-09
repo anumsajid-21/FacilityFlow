@@ -2,11 +2,12 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { ProvidersService } from "../providers/providers.service";
 import { PaginationDto, buildPage } from "../common/dto/pagination.dto";
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService, private audit: AuditService, private notifications: NotificationsService) {}
+  constructor(private prisma: PrismaService, private audit: AuditService, private notifications: NotificationsService, private providersService: ProvidersService) {}
 
   async dashboard() {
     const [totalOrganizations, totalProviders, totalServiceRequests, activeContracts, recentOrgs, recentProviders, recentRequests] = await Promise.all([
@@ -95,5 +96,13 @@ export class AdminService {
       void this.notifications.notify({ userId: u.id, type: "PROVIDER_VERIFIED", title: "Verification status updated", message: `Your provider verification status: ${status}` });
     }
     return provider;
+  }
+
+  verificationQueue() {
+    return this.providersService.verificationQueue();
+  }
+
+  bulkReviewDocuments(ids: string[], status: "APPROVED" | "REJECTED", notes: string | undefined, adminUserId: string) {
+    return this.providersService.bulkReview(ids, status, notes, adminUserId);
   }
 }

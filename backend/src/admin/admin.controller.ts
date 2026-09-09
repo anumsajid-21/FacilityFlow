@@ -4,13 +4,18 @@ import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser, AuthUser } from "../common/decorators/user.decorator";
 import { AdminService } from "./admin.service";
-import { IsEnum, IsString } from "class-validator";
+import { IsArray, IsEnum, IsOptional, IsString, IsUUID } from "class-validator";
 import { PaginationDto } from "../common/dto/pagination.dto";
 
 class VerifyProviderDto {
   @IsEnum({ values: ["VERIFIED", "REJECTED", "SUSPENDED", "UNDER_REVIEW"] })
   status: string;
   @IsString() notes: string;
+}
+class BulkReviewDto {
+  @IsArray() @IsUUID("4", { each: true }) ids: string[];
+  @IsEnum({ values: ["APPROVED", "REJECTED"] }) status: "APPROVED" | "REJECTED";
+  @IsOptional() @IsString() notes?: string;
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -57,5 +62,15 @@ export class AdminController {
   @Patch("providers/:id/status")
   async verifyProvider(@Param("id", ParseUUIDPipe) id: string, @Body() dto: VerifyProviderDto) {
     return this.admin.verifyProvider(id, dto.status, dto.notes);
+  }
+
+  @Get("verification-queue")
+  verificationQueue() {
+    return this.admin.verificationQueue();
+  }
+
+  @Post("verification-documents/bulk-review")
+  bulkReview(@CurrentUser() user: AuthUser, @Body() dto: BulkReviewDto) {
+    return this.admin.bulkReviewDocuments(dto.ids, dto.status, dto.notes, user.userId);
   }
 }

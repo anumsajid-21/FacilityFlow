@@ -14,6 +14,11 @@ export function StatusBadge({ status, className }: { status?: string | null; cla
   );
 }
 
+export function Badge({ children, variant = "neutral", className }: { children: React.ReactNode; variant?: "success" | "warning" | "danger" | "neutral"; className?: string }) {
+  const colors = { success: "bg-pine/10 text-pine", warning: "bg-brass-soft text-brass", danger: "bg-terracotta-soft text-terracotta", neutral: "bg-muted text-sage" };
+  return <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium", colors[variant], className)}>{children}</span>;
+}
+
 /* ---------- Card ---------- */
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return <div className={cn("rounded-xl border border-border bg-ivory shadow-card", className)}>{children}</div>;
@@ -143,6 +148,11 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
   <textarea ref={ref} className={cn(inputClass, "min-h-[90px]", className)} {...props} />
 ));
 Textarea.displayName = "Textarea";
+
+export const Checkbox = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(({ className, type = "checkbox", ...props }, ref) => (
+  <input ref={ref} type={type} className={cn("h-4 w-4 rounded border-border text-pine accent-pine", className)} {...props} />
+));
+Checkbox.displayName = "Checkbox";
 
 /* ---------- Table cells ---------- */
 export function Th({ children, className }: { children?: React.ReactNode; className?: string }) {

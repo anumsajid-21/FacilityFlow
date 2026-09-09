@@ -56,6 +56,12 @@ export const settingsApi = {
 
 export const analyticsApi = {
   dashboard: async () => unwrap<any>(await api.get("/analytics")),
+  spend: async (params: { from?: string; to?: string } = {}) => unwrap<any>(await api.get("/analytics/spend", { params })),
+  exportUrl: (params: { from?: string; to?: string } = {}) => {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return `${API_URL}/analytics/export.csv${query ? `?${query}` : ""}`;
+  },
+  exportCsv: async (params: { from?: string; to?: string } = {}) => api.get("/analytics/export.csv", { params, responseType: "blob" }),
 };
 
 export const adminApi = {
@@ -67,6 +73,9 @@ export const adminApi = {
   users: async () => unwrap<any[]>(await api.get("/admin/users")),
   activity: async () => unwrap<any[]>(await api.get("/admin/activity")),
   verifyProvider: async (id: string, status: string, notes: string) => unwrap(await api.patch(`/admin/providers/${id}/status`, { status, notes })),
+  verificationQueue: async () => unwrap<any[]>(await api.get("/admin/verification-queue")),
+  bulkReviewDocuments: async (ids: string[], status: "APPROVED" | "REJECTED", notes?: string) =>
+    unwrap(await api.post("/admin/verification-documents/bulk-review", { ids, status, notes })),
 };
 
 export const orgApi = {
@@ -193,4 +202,23 @@ export const contractsApi = {
   get: async (id: string) => unwrap<any>(await api.get(`/contracts/${id}`)),
   create: async (data: any) => unwrap<any>(await api.post("/contracts", data)),
   update: async (id: string, data: any) => unwrap(await api.patch(`/contracts/${id}`, data)),
+};
+
+export const messagingApi = {
+  threads: async () => unwrap<any>(await api.get("/messages/threads")),
+  thread: async (id: string) => unwrap<any>(await api.get(`/messages/threads/${id}`)),
+  create: async (data: any) => unwrap<any>(await api.post("/messages/threads", data)),
+  send: async (id: string, body: string) => unwrap<any>(await api.post(`/messages/threads/${id}/messages`, { body })),
+};
+
+export const slaApi = {
+  policies: async () => unwrap<any[]>(await api.get("/sla/policies")),
+  createPolicy: async (data: any) => unwrap<any>(await api.post("/sla/policies", data)),
+  job: async (id: string) => unwrap<any>(await api.get(`/sla/jobs/${id}`)),
+};
+
+export const recurringApi = {
+  get: async (contractId: string) => unwrap<any>(await api.get(`/recurring/contracts/${contractId}`)),
+  save: async (contractId: string, data: any) => unwrap<any>(await api.post(`/recurring/contracts/${contractId}`, data)),
+  pause: async (contractId: string, paused: boolean) => unwrap<any>(await api.patch(`/recurring/contracts/${contractId}`, { paused })),
 };

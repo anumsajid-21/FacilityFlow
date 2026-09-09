@@ -100,36 +100,38 @@ enum RecurrenceFrequency {
 // ============= IDENTITY & TENANCY =============
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  password     String
-  name         String
-  role         Role
-  avatarUrl    String?
-  phone        String?
-  hiringOrgId  String?
-  providerId   String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  name        String
+  role        Role
+  avatarUrl   String?
+  phone       String?
+  hiringOrgId String?
+  providerId  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  hiringOrg               Organization?            @relation(fields: [hiringOrgId], references: [id])
-  provider                Provider?                @relation(fields: [providerId], references: [id])
-  workerProfile           Worker?                  @relation("WorkerUser")
-  notificationPreference  NotificationPreference?
-  memberships             OrganizationMember[]
-  notifications       Notification[]
-  approvalsMade       Approval[]
-  auditActions        AuditLog[]
-  uploadedFiles       File[]
-  contractVersions    ContractVersion[]
-  paymentsRecorded    Payment[]
-  serviceRequests     ServiceRequest[]     @relation("ServiceRequestCreator")
-  invoicesCreated     Invoice[]            @relation("InvoiceCreator")
-  assetHistory        AssetHistory[]
-  proofCompleted      ProofOfWork[]  @relation("ProofCompleter")
-  reworkRequested     ReworkRequest[] @relation("ReworkRequester")
-  documentsReviewed   VerificationDocument[] @relation("DocumentReviewer")
+  hiringOrg              Organization?           @relation(fields: [hiringOrgId], references: [id])
+  provider               Provider?               @relation(fields: [providerId], references: [id])
+  workerProfile          Worker?                 @relation("WorkerUser")
+  notificationPreference NotificationPreference?
+  memberships            OrganizationMember[]
+  notifications          Notification[]
+  approvalsMade          Approval[]
+  auditActions           AuditLog[]
+  uploadedFiles          File[]
+  contractVersions       ContractVersion[]
+  paymentsRecorded       Payment[]
+  serviceRequests        ServiceRequest[]        @relation("ServiceRequestCreator")
+  invoicesCreated        Invoice[]               @relation("InvoiceCreator")
+  assetHistory           AssetHistory[]
+  proofCompleted         ProofOfWork[]           @relation("ProofCompleter")
+  reworkRequested        ReworkRequest[]         @relation("ReworkRequester")
+  documentsReviewed      VerificationDocument[]  @relation("DocumentReviewer")
+  sentMessages           Message[]
+  messageThreads         MessageThread[]         @relation("ThreadCreator")
 
   @@index([hiringOrgId])
   @@index([providerId])
@@ -154,6 +156,7 @@ model Organization {
   reviews         Review[]
   shortlists      ProviderShortlist[]
   assets          Asset[]
+  messageThreads  MessageThread[]
 
   @@index([name])
 }
@@ -170,6 +173,7 @@ model OrganizationMember {
 
   @@unique([organizationId, userId])
 }
+
 // ============= PROVIDER =============
 
 model Provider {
@@ -189,18 +193,20 @@ model Provider {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  users            User[]
-  services         ProviderService[]
-  serviceAreas     ProviderServiceArea[]
-  documents        ProviderDocument[]
-  quotations       Quotation[]
-  contracts        Contract[]
-  workers          Worker[]
-  invoices         Invoice[]
-  reviews          Review[]
-  shortlists       ProviderShortlist[]
-  customChecklists Checklist[]
+  users                 User[]
+  services              ProviderService[]
+  serviceAreas          ProviderServiceArea[]
+  documents             ProviderDocument[]
+  quotations            Quotation[]
+  contracts             Contract[]
+  workers               Worker[]
+  invoices              Invoice[]
+  reviews               Review[]
+  shortlists            ProviderShortlist[]
+  customChecklists      Checklist[]
   verificationDocuments VerificationDocument[]
+  messageThreads        MessageThread[]
+  slaPolicies           SlaPolicy[]
 
   @@index([verificationStatus])
 }
@@ -267,6 +273,7 @@ model ServiceCategory {
   checklists Checklist[]
   requests   ServiceRequest[]
 }
+
 // ============= FACILITIES =============
 
 model Building {
@@ -301,10 +308,10 @@ model Floor {
   updatedAt  DateTime @updatedAt
   isArchived Boolean  @default(false)
 
-  building Building @relation(fields: [buildingId], references: [id])
-  areas    Area[]
+  building        Building         @relation(fields: [buildingId], references: [id])
+  areas           Area[]
   serviceRequests ServiceRequest[]
-  jobs     Job[]
+  jobs            Job[]
 
   @@index([buildingId])
 }
@@ -318,10 +325,10 @@ model Area {
   updatedAt  DateTime @updatedAt
   isArchived Boolean  @default(false)
 
-  floor  Floor   @relation(fields: [floorId], references: [id])
-  assets Asset[]
+  floor           Floor            @relation(fields: [floorId], references: [id])
+  assets          Asset[]
   serviceRequests ServiceRequest[]
-  jobs   Job[]
+  jobs            Job[]
 
   @@index([floorId])
 }
@@ -344,13 +351,13 @@ model Asset {
   maintenanceFrequency String?
   status               String    @default("OPERATIONAL")
   notes                String?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
-  isArchived           Boolean    @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  isArchived           Boolean   @default(false)
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  area    Area?          @relation(fields: [areaId], references: [id])
-  history AssetHistory[]
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  area         Area?          @relation(fields: [areaId], references: [id])
+  history      AssetHistory[]
 
   @@index([organizationId])
   @@index([areaId])
@@ -372,37 +379,39 @@ model AssetHistory {
 
   @@index([assetId, timestamp])
 }
+
 // ============= SERVICE REQUESTS =============
 
 model ServiceRequest {
-  id                  String               @id @default(uuid())
-  organizationId      String
-  createdById         String?
-  categoryId          String?
-  title               String
-  description         String
-  buildingId          String
-  floorId             String?
-  areaId              String?
-  requirements        String?
-  preferredDate       DateTime?
-  frequency           String?
-  budget              Float?
-  priority            String?
-  status              ServiceRequestStatus @default(DRAFT)
-  isArchived          Boolean              @default(false)
-  cancellationReason  String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                 String               @id @default(uuid())
+  organizationId     String
+  createdById        String?
+  categoryId         String?
+  title              String
+  description        String
+  buildingId         String
+  floorId            String?
+  areaId             String?
+  requirements       String?
+  preferredDate      DateTime?
+  frequency          String?
+  budget             Float?
+  priority           String?
+  status             ServiceRequestStatus @default(DRAFT)
+  isArchived         Boolean              @default(false)
+  cancellationReason String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
-  organization Organization        @relation(fields: [organizationId], references: [id])
-  createdBy    User?               @relation("ServiceRequestCreator", fields: [createdById], references: [id])
-  category     ServiceCategory?    @relation(fields: [categoryId], references: [id])
-  building     Building            @relation(fields: [buildingId], references: [id])
-  floor        Floor?              @relation(fields: [floorId], references: [id])
-  area         Area?               @relation(fields: [areaId], references: [id])
-  quotations   Quotation[]
-  attachments  ServiceRequestAttachment[]
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  createdBy      User?                      @relation("ServiceRequestCreator", fields: [createdById], references: [id])
+  category       ServiceCategory?           @relation(fields: [categoryId], references: [id])
+  building       Building                   @relation(fields: [buildingId], references: [id])
+  floor          Floor?                     @relation(fields: [floorId], references: [id])
+  area           Area?                      @relation(fields: [areaId], references: [id])
+  quotations     Quotation[]
+  attachments    ServiceRequestAttachment[]
+  messageThreads MessageThread[]
 
   @@index([organizationId, status])
   @@index([categoryId])
@@ -434,7 +443,7 @@ model Quotation {
   sla              String?
   warranty         String?
   terms            String?
-    expiryDate       DateTime?
+  expiryDate       DateTime?
   notes            String?
   status           QuotationStatus @default(DRAFT)
   submittedAt      DateTime?
@@ -450,17 +459,18 @@ model Quotation {
   @@index([serviceRequestId, status])
   @@index([providerId])
 }
+
 // ============= CONTRACTS =============
 
 model Contract {
-  id                String             @id @default(uuid())
+  id                String               @id @default(uuid())
   organizationId    String
   providerId        String
   serviceRequestId  String?
-  quotationId       String?   @unique
+  quotationId       String?              @unique
   buildingId        String
   serviceName       String?
-  price             Decimal          @db.Decimal(12, 2)
+  price             Decimal              @db.Decimal(12, 2)
   startDate         DateTime
   endDate           DateTime?
   frequency         RecurrenceFrequency?
@@ -471,12 +481,12 @@ model Contract {
   cancellationTerms String?
   responsibilities  String?
   renewalTerms      String?
-  status            ContractStatus     @default(DRAFT)
+  status            ContractStatus       @default(DRAFT)
   title             String?
   cancelledAt       DateTime?
   terminatedAt      DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   organization     Organization      @relation(fields: [organizationId], references: [id])
   provider         Provider          @relation(fields: [providerId], references: [id])
@@ -485,6 +495,8 @@ model Contract {
   contractVersions ContractVersion[]
   jobs             Job[]
   invoices         Invoice[]
+  schedule         ContractSchedule?
+  messageThreads   MessageThread[]
 
   @@index([organizationId, status])
   @@index([providerId, status])
@@ -551,16 +563,17 @@ model Job {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  contract          Contract           @relation(fields: [contractId], references: [id])
-  building          Building           @relation(fields: [buildingId], references: [id])
-  floor             Floor?             @relation(fields: [floorId], references: [id])
-  area              Area?              @relation(fields: [areaId], references: [id])
+  contract          Contract             @relation(fields: [contractId], references: [id])
+  building          Building             @relation(fields: [buildingId], references: [id])
+  floor             Floor?               @relation(fields: [floorId], references: [id])
+  area              Area?                @relation(fields: [areaId], references: [id])
   workerAssignments WorkerAssignment[]
   checklistResults  JobChecklistResult[]
   proofOfWork       ProofOfWork[]
   approvals         Approval[]
   reworkRequests    ReworkRequest[]
   invoices          Invoice[]
+  sla               JobSla?
 
   @@index([contractId, status])
   @@index([buildingId])
@@ -605,24 +618,25 @@ model ChecklistItem {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
-  checklist Checklist           @relation(fields: [checklistId], references: [id])
+  checklist Checklist            @relation(fields: [checklistId], references: [id])
   results   JobChecklistResult[]
 }
 
 model JobChecklistResult {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   jobId           String
   checklistId     String?
   checklistItemId String
-  isChecked       Boolean   @default(false)
+  isChecked       Boolean  @default(false)
   notes           String?
-  checkedAt       DateTime  @updatedAt
+  checkedAt       DateTime @updatedAt
 
   job           Job           @relation(fields: [jobId], references: [id])
   checklistItem ChecklistItem @relation(fields: [checklistItemId], references: [id])
 
   @@unique([jobId, checklistItemId])
 }
+
 // ============= PROOF OF WORK / APPROVAL / REWORK =============
 
 model ProofOfWork {
@@ -644,12 +658,12 @@ model ProofOfWork {
 }
 
 model Approval {
-  id                String           @id @default(uuid())
-  jobId             String
-  approvedByUserId  String?
-  decision          ApprovalDecision
-  notes             String?
-  createdAt         DateTime         @default(now())
+  id               String           @id @default(uuid())
+  jobId            String
+  approvedByUserId String?
+  decision         ApprovalDecision
+  notes            String?
+  createdAt        DateTime         @default(now())
 
   job        Job   @relation(fields: [jobId], references: [id])
   approvedBy User? @relation(fields: [approvedByUserId], references: [id])
@@ -682,10 +696,10 @@ model Invoice {
   organizationId String
   contractId     String
   jobId          String?
-  amount         Decimal         @db.Decimal(12, 2)
-  tax            Decimal?        @db.Decimal(12, 2)
-  discount       Decimal?        @db.Decimal(12, 2)
-  total          Decimal         @db.Decimal(12, 2)
+  amount         Decimal       @db.Decimal(12, 2)
+  tax            Decimal?      @db.Decimal(12, 2)
+  discount       Decimal?      @db.Decimal(12, 2)
+  total          Decimal       @db.Decimal(12, 2)
   issuedById     String?
   dueDate        DateTime
   status         InvoiceStatus @default(DRAFT)
@@ -707,7 +721,7 @@ model Invoice {
 model Payment {
   id               String   @id @default(uuid())
   invoiceId        String
-  amount           Decimal         @db.Decimal(12, 2)
+  amount           Decimal  @db.Decimal(12, 2)
   paymentReference String?
   date             DateTime
   paymentMethod    String?
@@ -791,12 +805,12 @@ model File {
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  uploadedBy                User?                        @relation(fields: [uploadedById], references: [id])
+  uploadedBy                User?                      @relation(fields: [uploadedById], references: [id])
   providerDocuments         ProviderDocument[]
   verificationDocuments     VerificationDocument[]
   serviceRequestAttachments ServiceRequestAttachment[]
-  beforeProof               ProofOfWork[]                @relation("BeforePhotos")
-  afterProof                ProofOfWork[]                @relation("AfterPhotos")
+  beforeProof               ProofOfWork[]              @relation("BeforePhotos")
+  afterProof                ProofOfWork[]              @relation("AfterPhotos")
 
   @@index([kind])
 }
@@ -804,20 +818,120 @@ model File {
 // ============= PROVIDER VERIFICATION =============
 
 model VerificationDocument {
-  id           String    @id @default(uuid())
-  providerId   String
-  documentType String
-  fileId       String    @unique
-  status       String    @default("PENDING")
-  reviewedById String?
-  reviewedAt   DateTime?
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(uuid())
+  providerId    String
+  documentType  String
+  fileId        String    @unique
+  status        String    @default("PENDING")
+  expiresAt     DateTime?
+  reviewNotes   String?
+  resubmittedAt DateTime?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime  @default(now())
 
-  provider  Provider @relation(fields: [providerId], references: [id])
-  file      File     @relation(fields: [fileId], references: [id])
-  reviewedBy User?   @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+  provider   Provider @relation(fields: [providerId], references: [id])
+  file       File     @relation(fields: [fileId], references: [id])
+  reviewedBy User?    @relation("DocumentReviewer", fields: [reviewedById], references: [id])
 
   @@index([providerId])
+}
+
+// ============= MESSAGING =============
+
+model MessageThread {
+  id               String   @id @default(uuid())
+  organizationId   String
+  providerId       String
+  contractId       String?
+  serviceRequestId String?
+  subject          String
+  createdById      String
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  provider       Provider        @relation(fields: [providerId], references: [id])
+  contract       Contract?       @relation(fields: [contractId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  createdBy      User            @relation("ThreadCreator", fields: [createdById], references: [id])
+  messages       Message[]
+
+  @@index([organizationId, updatedAt])
+  @@index([providerId, updatedAt])
+}
+
+model Message {
+  id        String    @id @default(uuid())
+  threadId  String
+  senderId  String
+  body      String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([senderId, readAt])
+}
+
+// ============= SLA TRACKING =============
+
+model SlaPolicy {
+  id              String   @id @default(uuid())
+  providerId      String?
+  name            String
+  responseHours   Int?
+  resolutionHours Int
+  warningHours    Int?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  provider Provider? @relation(fields: [providerId], references: [id])
+  jobs     JobSla[]
+
+  @@index([providerId, isActive])
+}
+
+model JobSla {
+  id          String    @id @default(uuid())
+  jobId       String    @unique
+  policyId    String?
+  deadline    DateTime
+  status      String    @default("ON_TRACK")
+  breachedAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  job    Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  policy SlaPolicy? @relation(fields: [policyId], references: [id])
+
+  @@index([status, deadline])
+}
+
+// ============= RECURRING CONTRACT SCHEDULES =============
+
+model ContractSchedule {
+  id               String              @id @default(uuid())
+  contractId       String              @unique
+  frequency        RecurrenceFrequency
+  startsAt         DateTime
+  nextRunAt        DateTime
+  endsAt           DateTime?
+  occurrences      Int                 @default(0)
+  occurrencesLimit Int?
+  paused           Boolean             @default(false)
+  lastGeneratedAt  DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([paused, nextRunAt])
 }
 
 // ============= NOTIFICATION PREFERENCES =============

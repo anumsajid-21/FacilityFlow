@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { HardHat, ArrowRight } from "lucide-react";
+import { HardHat, ArrowRight, AlertTriangle } from "lucide-react";
 import { jobsApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, EmptyState, Loading, StatusBadge } from "@/components/ui/kit";
@@ -57,6 +57,7 @@ export default function JobsPage() {
                           <StatusBadge status={j.status} className="shrink-0" />
                         </p>
                         <p className="mt-1 flex items-center gap-1 text-xs text-sage"><HardHat className="h-3 w-3" /> {dateShort(j.date)} · {j.contract?.provider?.name || j.contract?.organization?.name}</p>
+                        {j.sla?.status === "BREACHED" && <span className="mt-2 flex items-center gap-1 text-xs font-medium text-terracotta"><AlertTriangle className="h-3 w-3" /> SLA breached</span>}
                         <span className="mt-2 hidden items-center gap-1 text-xs font-medium text-pine group-hover:flex"><ArrowRight className="h-3 w-3" /> Open</span>
                       </Link>
                     </Card>
