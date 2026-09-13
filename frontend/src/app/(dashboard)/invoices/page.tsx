@@ -15,7 +15,7 @@ export default function InvoicesPage() {
   const isProvider = user?.role === "PROVIDER";
   const [invoices, setInvoices] = useState<any[] | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
-  const [payForm, setPayForm] = useState({ amount: "", date: "", paymentReference: "", paymentMethod: "BANK_TRANSFER" });
+  const [payForm, setPayForm] = useState({ amount: "", date: "", paymentMethod: "BANK_TRANSFER" });
   const [busy, setBusy] = useState("");
 
   const load = () => invoicesApi.list().then((p) => setInvoices(p.data)).catch(() => setInvoices([]));
@@ -32,17 +32,15 @@ export default function InvoicesPage() {
 
   const recordPayment = async () => {
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.error("Required", "Enter a payment amount.");
-    if (!payForm.paymentReference.trim()) return toast.error("Required", "Enter a payment reference.");
     setBusy("pay");
     try {
       await invoicesApi.addPayment(detail.id, {
         amount: Number(payForm.amount),
         date: payForm.date || undefined,
-        paymentReference: payForm.paymentReference,
         paymentMethod: payForm.paymentMethod,
       });
       toast.success("Payment recorded");
-      setPayForm({ amount: "", date: "", paymentReference: "", paymentMethod: "BANK_TRANSFER" });
+      setPayForm({ amount: "", date: "", paymentMethod: "BANK_TRANSFER" });
       const d = await invoicesApi.get(detail.id);
       setDetail(d);
       load();
@@ -142,13 +140,14 @@ export default function InvoicesPage() {
               <div><p className="text-xs text-sage">Amount</p><p className="font-medium text-charcoal">{money(detail.amount)}</p></div>
               <div><p className="text-xs text-sage">Total</p><p className="font-medium text-charcoal">{money(detail.total)}</p></div>
               <div><p className="text-xs text-sage">Status</p><StatusBadge status={detail.status} /></div>
+              <div><p className="text-xs text-sage">Total paid</p><p className="font-medium text-charcoal">{money(detail.totalPaid ?? 0)}</p></div>
               <div><p className="text-xs text-sage">Balance</p><p className="font-medium text-charcoal">{money(detail.balance ?? detail.total)}</p></div>
             </div>
 
             {isProvider && (
               <Field label="Update status">
                 <select className="h-10 w-full rounded-lg border border-input bg-ivory px-3 text-sm" value={detail.status} disabled={busy === detail.id} onChange={(e) => changeStatus(detail, e.target.value)}>
-                  {["DRAFT", "ISSUED", "PENDING", "PAID", "OVERDUE", "CANCELLED"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  {["DRAFT", "ISSUED", "PENDING", "OVERDUE", "CANCELLED"].map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </Field>
             )}
@@ -176,7 +175,6 @@ export default function InvoicesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Amount *"><Input type="number" min={0} step="0.01" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} /></Field>
                   <Field label="Payment date"><Input type="date" value={payForm.date} onChange={(e) => setPayForm({ ...payForm, date: e.target.value })} /></Field>
-                  <Field label="Reference *"><Input value={payForm.paymentReference} onChange={(e) => setPayForm({ ...payForm, paymentReference: e.target.value })} placeholder="e.g. TRX-90210" /></Field>
                   <Field label="Method">
                     <select className="h-10 w-full rounded-lg border border-input bg-ivory px-3 text-sm" value={payForm.paymentMethod} onChange={(e) => setPayForm({ ...payForm, paymentMethod: e.target.value })}>
                       {["BANK_TRANSFER", "CASH", "CHEQUE", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{m}</option>)}

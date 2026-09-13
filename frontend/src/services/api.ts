@@ -166,7 +166,7 @@ export const invoicesApi = {
   list: async (params: { page?: number; limit?: number } = {}) => page<any>(await api.get("/invoices", { params: { limit: 50, ...params } })),
   get: async (id: string) => unwrap<any>(await api.get(`/invoices/${id}`)),
   updateStatus: async (id: string, status: string) => unwrap(await api.patch(`/invoices/${id}/status`, { status })),
-  addPayment: async (id: string, data: { amount: number; paymentReference: string; paymentMethod: string; date?: string }) =>
+  addPayment: async (id: string, data: { amount: number; paymentMethod: string; date?: string }) =>
     unwrap(await api.post(`/invoices/${id}/payments`, data)),
   pdfUrl: (id: string) => `${API_URL}/invoices/${id}/pdf`,
   paymentHistory: async (params: { from?: string; to?: string; providerId?: string; category?: string } = {}) => {

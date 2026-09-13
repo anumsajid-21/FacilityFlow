@@ -37,8 +37,10 @@ export class InvoicesService {
   async get(user: AuthUser, id: string) {
     const inv = await this.load(user, id);
     const payments = await this.prisma.payment.findMany({ where: { invoiceId: inv.id } });
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-    return { ...inv, payments, totalPaid, balance: Number(inv.total) - totalPaid };
+    const totalPaid = payments.filter((p) => p.status === "COMPLETED").reduce((sum, p) => sum + Number(p.amount), 0);
+    const balance = Math.max(0, Number(inv.total) - totalPaid);
+    const status = inv.status === "PAID" && balance > 0 ? "ISSUED" : inv.status;
+    return { ...inv, status, payments, totalPaid, balance };
   }
 
   /** Provider manually issues an invoice tied to a completed job. */
@@ -75,7 +77,8 @@ export class InvoicesService {
   async updateStatus(user: AuthUser, id: string, status: string) {
     const inv = await this.load(user, id);
     if (user.role !== "PROVIDER" || user.providerId !== inv.providerId) throw new ForbiddenException("Not your invoice");
-    const valid = ["DRAFT", "ISSUED", "PENDING", "PAID", "OVERDUE", "CANCELLED"];
+    if (status === "PAID") throw new BadRequestException("Paid status is set automatically after recording the full payment");
+    const valid = ["DRAFT", "ISSUED", "PENDING", "OVERDUE", "CANCELLED"];
     if (!valid.includes(status)) throw new BadRequestException("Invalid status");
     const updated = await this.prisma.invoice.update({ where: { id: inv.id }, data: { status: status as any } });
     void this.audit.log({ actorId: user.userId, action: "INVOICE_STATUS_CHANGE", entityType: "Invoice", entityId: id, details: { status } });
@@ -99,14 +102,16 @@ export class InvoicesService {
     let finalStatus = inv.status as string;
     const payment = await this.prisma.$transaction(async (tx) => {
       const p = await tx.payment.create({
-        data: { invoiceId: inv.id, amount: dto.amount, paymentReference: dto.paymentReference, date: dto.date ? new Date(dto.date) : new Date(), paymentMethod: dto.paymentMethod, status: "COMPLETED", recordedById: user.userId },
+        data: { invoiceId: inv.id, amount: dto.amount, date: dto.date ? new Date(dto.date) : new Date(), paymentMethod: dto.paymentMethod, status: "COMPLETED", recordedById: user.userId },
       });
+      const paymentReference = `PAY-${p.id.replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+      const recordedPayment = await tx.payment.update({ where: { id: p.id }, data: { paymentReference } });
       const newTotal = await tx.payment.aggregate({ where: { invoiceId: inv.id }, _sum: { amount: true } });
       const paid = Number(newTotal._sum.amount ?? 0);
       const newStatus = paid >= Number(inv.total) ? "PAID" : inv.status;
       finalStatus = newStatus;
       await tx.invoice.update({ where: { id: inv.id }, data: { status: newStatus } });
-      return p;
+      return recordedPayment;
     });
     void this.audit.log({ actorId: user.userId, action: "PAYMENT_RECORDED", entityType: "Payment", entityId: payment.id, details: { invoiceId: id, amount: dto.amount } });
     await this.notifications.notifyProvider(inv.providerId, { type: "PAYMENT_RECORDED", title: "Payment recorded", message: `Payment of ${dto.amount} was recorded against invoice ${inv.invoiceNumber}.` });
