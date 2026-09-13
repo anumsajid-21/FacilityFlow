@@ -92,8 +92,11 @@ export const facilitiesApi = {
   archiveBuilding: async (id: string) => unwrap(await api.post(`/facilities/buildings/${id}/archive`)),
   floors: async (buildingId: string) => unwrap<any[]>(await api.get(`/facilities/buildings/${buildingId}/floors`)),
   createFloor: async (buildingId: string, name: string) => unwrap(await api.post(`/facilities/buildings/${buildingId}/floors`, { name })),
+  updateFloor: async (id: string, name: string) => unwrap(await api.patch(`/facilities/floors/${id}`, { name })),
+  archiveFloor: async (id: string) => unwrap(await api.post(`/facilities/floors/${id}/archive`)),
   areas: async (floorId: string) => unwrap<any[]>(await api.get(`/facilities/floors/${floorId}/areas`)),
   createArea: async (floorId: string, data: { name: string; category?: string }) => unwrap(await api.post(`/facilities/floors/${floorId}/areas`, data)),
+  updateArea: async (id: string, data: { name?: string; category?: string }) => unwrap(await api.patch(`/facilities/areas/${id}`, data)),
   areaCategories: async () => unwrap<string[]>(await api.get("/facilities/area-categories")),
 };
 
@@ -105,6 +108,7 @@ export const providersApi = {
 
 export const serviceRequestsApi = {
   list: async (params: { page?: number; limit?: number } = {}) => page<any>(await api.get("/service-requests", { params: { limit: 50, ...params } })),
+  categories: async () => unwrap<any[]>(await api.get("/service-requests/categories")),
   get: async (id: string) => unwrap<any>(await api.get(`/service-requests/${id}`)),
   create: async (data: any) => unwrap<any>(await api.post("/service-requests", data)),
   update: async (id: string, data: any) => unwrap(await api.patch(`/service-requests/${id}`, data)),
@@ -133,6 +137,7 @@ export const jobsApi = {
   complete: async (id: string) => unwrap(await api.post(`/jobs/${id}/complete`)),
   assignWorker: async (id: string, workerId: string) => unwrap(await api.post(`/jobs/${id}/assign-worker`, { workerId })),
   workers: async (id: string) => unwrap<any[]>(await api.get(`/jobs/${id}/workers`)),
+  activity: async (id: string) => unwrap<any[]>(await api.get(`/jobs/${id}/activity`)),
 };
 
 export const workersApi = {
@@ -164,6 +169,14 @@ export const invoicesApi = {
   addPayment: async (id: string, data: { amount: number; paymentReference: string; paymentMethod: string; date?: string }) =>
     unwrap(await api.post(`/invoices/${id}/payments`, data)),
   pdfUrl: (id: string) => `${API_URL}/invoices/${id}/pdf`,
+  paymentHistory: async (params: { from?: string; to?: string; providerId?: string; category?: string } = {}) => {
+    const body: any = await api.get("/invoices/payment-history", { params }).then((r) => r.data?.data ?? r.data);
+    const data: any[] = Array.isArray(body) ? body : (body?.data ?? []);
+    const total = Array.isArray(body) ? data.reduce((s: number, r: any) => s + Number(r.amount || 0), 0) : Number(body?.total ?? 0);
+    return { data, total, count: data.length };
+  },
+  paymentHistoryCsvUrl: (params: { from?: string; to?: string; providerId?: string; category?: string } = {}) =>
+    `${API_URL}/invoices/payment-history/csv?${new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString()}`,
 };
 
 export const checklistsApi = {
@@ -202,6 +215,7 @@ export const contractsApi = {
   get: async (id: string) => unwrap<any>(await api.get(`/contracts/${id}`)),
   create: async (data: any) => unwrap<any>(await api.post("/contracts", data)),
   update: async (id: string, data: any) => unwrap(await api.patch(`/contracts/${id}`, data)),
+  activity: async (id: string) => unwrap<any[]>(await api.get(`/contracts/${id}/activity`)),
 };
 
 export const messagingApi = {

@@ -5,7 +5,7 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser, AuthUser } from "../common/decorators/user.decorator";
 import { InvoicesService } from "./invoices.service";
 import { PaginationDto } from "../common/dto/pagination.dto";
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsNumber, IsOptional, IsString } from "class-validator";
 
 class PaymentRecordDto {
   @IsNumber() amount: number;
@@ -18,6 +18,29 @@ class PaymentRecordDto {
 @Controller("api/v1/invoices")
 export class InvoicesController {
   constructor(private readonly is: InvoicesService) {}
+
+  @Get("payment-history")
+  paymentHistory(
+    @CurrentUser() user: AuthUser,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("providerId") providerId?: string,
+    @Query("category") category?: string,
+  ) {
+    return this.is.paymentHistory(user, { from, to, providerId, category });
+  }
+
+  @Get("payment-history/csv")
+  paymentHistoryCsv(
+    @Res() res: any,
+    @CurrentUser() user: AuthUser,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("providerId") providerId?: string,
+    @Query("category") category?: string,
+  ) {
+    return this.is.paymentHistoryCsv(user, { from, to, providerId, category }, res);
+  }
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() q: PaginationDto) {

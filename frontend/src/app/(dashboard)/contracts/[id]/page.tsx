@@ -2,12 +2,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Calendar, DollarSign, HardHat, FileSignature } from "lucide-react";
-import { contractsApi, jobsApi, recurringApi } from "@/services/api";
+import { contractsApi, jobsApi, recurringApi, apiError } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, Loading, StatusBadge, Modal, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
-import { money, dateShort } from "@/lib/utils";
+import { money, dateShort, cn } from "@/lib/utils";
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,12 +19,16 @@ export default function ContractDetailPage() {
   const [busy, setBusy] = useState(false);
   const [jobForm, setJobForm] = useState({ title: "", date: "", startTime: "", endTime: "", instructions: "" });
   const [schedule, setSchedule] = useState<any>(null);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({ frequency: "MONTHLY", startsAt: "" });
+  const [tab, setTab] = useState<"overview" | "activity">("overview");
+  const [activity, setActivity] = useState<any[] | null>(null);
 
   useEffect(() => {
     contractsApi.get(id).then(setContract).catch(() => setContract(undefined));
     jobsApi.list({ limit: 100 }).then((p) => setJobs(p.data.filter((j: any) => j.contractId === id))).catch(() => setJobs([]));
     recurringApi.get(id).then(setSchedule).catch(() => setSchedule(null));
+    contractsApi.activity(id).then(setActivity).catch(() => setActivity([]));
   }, [id]);
 
   const isHiring = user?.role === "HIRING_ORG" || user?.role === "ADMIN";
@@ -45,14 +49,67 @@ export default function ContractDetailPage() {
     if (!scheduleForm.startsAt) return toast.error("Required", "Choose the first run date.");
     try { setSchedule(await recurringApi.save(id, { ...scheduleForm, startsAt: new Date(scheduleForm.startsAt).toISOString() })); toast.success("Schedule saved"); } catch (e: any) { toast.error("Failed", e?.message || "Could not save schedule"); }
   };
-  const toggleSchedule = async () => { try { setSchedule(await recurringApi.pause(id, !schedule?.paused)); } catch (e: any) { toast.error("Failed", e?.message || "Could not update schedule"); } };
+  const toggleSchedule = async () => {
+    setScheduleBusy(true);
+    try {
+      setSchedule(await recurringApi.pause(id, !schedule?.paused));
+      toast.success(schedule?.paused ? "Schedule resumed" : "Schedule paused");
+    } catch (e: any) {
+      toast.error("Failed", apiError(e));
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
 
   if (contract === undefined) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Contract not found.</div>;
   if (!contract) return <Loading />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title={contract.title || contract.serviceName || "Contract"} subtitle={`${contract.provider?.name ?? "Provider"} · ${contract.organization?.name ?? "Organization"}`} actions={<><StatusBadge status={contract.status} /><Button variant="outline" onClick={() => router.back()}><ArrowLeft className="h-4 w-4" /> Back</Button></>} />
+      <PageHeader title={contract.title || contract.serviceName || "Contract"} subtitle={`${contract.provider?.name ?? "Provider"} · ${contract.organization?.name ?? "Organization"}`} actions={<><StatusBadge status={contract.status} className={contract.status === "ACTIVE" ? "border-green-200 bg-green-100 px-3 py-1 text-sm text-green-700" : undefined} /><Button variant="outline" onClick={() => router.back()}><ArrowLeft className="h-4 w-4" /> Back</Button></>} />
+      <div className="flex gap-2 border-b border-border">
+        {(["overview", "activity"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors",
+              tab === t ? "border-terracotta text-pine" : "border-transparent text-sage hover:text-charcoal",
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      {tab === "activity" ? (
+        <Card>
+          <div className="border-b border-border px-5 py-4">
+            <h3 className="font-semibold text-charcoal">Activity</h3>
+            <p className="text-xs text-sage">Chronological history of events for this contract.</p>
+          </div>
+          {activity === null ? (
+            <Loading />
+          ) : activity.length === 0 ? (
+            <p className="p-5 text-sm text-sage">No activity recorded yet.</p>
+          ) : (
+            <ol className="relative space-y-0 px-5 py-4">
+              {activity.map((ev: any, i: number) => (
+                <li key={i} className="relative flex gap-3 pb-5 last:pb-0">
+                  <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-terracotta ring-4 ring-terracotta-soft" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-charcoal">{ev.description}</p>
+                    <p className="text-xs text-sage">
+                      {ev.type.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                      {ev.actor ? ` · by ${ev.actor}` : ""} · {new Date(ev.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </Card>
+      ) : (
+      <>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Contract Details</h3></div>
@@ -75,7 +132,7 @@ export default function ContractDetailPage() {
           {isHiring && contract.status === "ACTIVE" && <Button className="mt-4 w-full" onClick={() => setOpenCreateJob(true)}><HardHat className="h-4 w-4" /> Create Job</Button>}
         </Card>
       </div>
-      {contract.status === "ACTIVE" && <Card className="p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold text-charcoal">Recurring schedule</h3><p className="text-xs text-sage">{schedule ? `${schedule.frequency} · next run ${dateShort(schedule.nextRunAt)}${schedule.paused ? " · paused" : ""}` : "Automatically generate jobs for this contract."}</p></div>{schedule && <Button variant="outline" size="sm" onClick={toggleSchedule}>{schedule.paused ? "Resume" : "Pause"}</Button>}</div>{!schedule && <div className="mt-4 flex flex-wrap items-end gap-3"><Field label="Frequency"><select className="h-10 rounded-lg border border-input bg-ivory px-3 text-sm" value={scheduleForm.frequency} onChange={(e) => setScheduleForm({ ...scheduleForm, frequency: e.target.value })}><option>DAILY</option><option>WEEKLY</option><option>MONTHLY</option><option>QUARTERLY</option></select></Field><Field label="First run"><Input type="date" value={scheduleForm.startsAt} onChange={(e) => setScheduleForm({ ...scheduleForm, startsAt: e.target.value })} /></Field><Button onClick={saveSchedule}>Enable schedule</Button></div>}</Card>}
+      {contract.status === "ACTIVE" && <Card className="p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold text-charcoal">Recurring schedule</h3><p className="text-xs text-sage">{schedule ? `${schedule.frequency} · next run ${dateShort(schedule.nextRunAt)}${schedule.paused ? " · paused" : ""}` : "Automatically generate jobs for this contract."}</p></div>{schedule && <Button variant="outline" size="sm" loading={scheduleBusy} onClick={toggleSchedule}>{schedule.paused ? "Resume" : "Pause"}</Button>}</div>{!schedule && <div className="mt-4 flex flex-wrap items-end gap-3"><Field label="Frequency"><select className="h-10 rounded-lg border border-input bg-ivory px-3 text-sm" value={scheduleForm.frequency} onChange={(e) => setScheduleForm({ ...scheduleForm, frequency: e.target.value })}><option>DAILY</option><option>WEEKLY</option><option>MONTHLY</option><option>QUARTERLY</option></select></Field><Field label="First run"><Input type="date" value={scheduleForm.startsAt} onChange={(e) => setScheduleForm({ ...scheduleForm, startsAt: e.target.value })} /></Field><Button onClick={saveSchedule}>Enable schedule</Button></div>}</Card>}
       <Card>
         <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Jobs ({jobs.length})</h3></div>
         {jobs.length === 0 ? (
@@ -92,6 +149,8 @@ export default function ContractDetailPage() {
           </div>
         )}
       </Card>
+      </>
+      )}
       <Modal open={openCreateJob} onClose={() => setOpenCreateJob(false)} title="Create Job">
         <form onSubmit={(e) => { e.preventDefault(); createJob(); }} className="space-y-4">
           <Field label="Title"><Input value={jobForm.title} onChange={(e) => setJobForm({ ...jobForm, title: e.target.value })} placeholder="Weekly cleaning" required /></Field>

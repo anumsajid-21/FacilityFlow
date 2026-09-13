@@ -39,11 +39,11 @@ export class ContractsService {
   }
 
   async get(user: AuthUser, id: string) {
-    const c = await this.prisma.contract.findUnique({ where: { id }, include: { organization: true, provider: true, quotation: true, building: true, versions: true, jobs: true } });
+    const c = await this.prisma.contract.findUnique({ where: { id }, include: { organization: true, provider: true, quotation: true, building: true, contractVersions: { orderBy: { version: "asc" } }, jobs: true } });
     if (!c) throw new NotFoundException("Contract not found");
     if (user.role === "HIRING_ORG" && c.organizationId !== user.hiringOrgId) throw new ForbiddenException("Access denied");
     if (user.role === "PROVIDER" && c.providerId !== user.providerId) throw new ForbiddenException("Access denied");
-    return c;
+    return { ...c, versions: c.contractVersions ?? [] };
   }
 
   async versions(user: AuthUser, id: string) {
@@ -116,7 +116,58 @@ export class ContractsService {
     return snap;
   }
 
+  /** Chronological activity timeline for a contract (audit logs + derived events). */
+  async activity(user: AuthUser, id: string) {
+    await this.get(user, id);
+    const [invoices, versions, payments] = await Promise.all([
+      this.prisma.invoice.findMany({ where: { contractId: id }, select: { id: true, invoiceNumber: true, createdAt: true } }),
+      this.prisma.contractVersion.findMany({ where: { contractId: id }, orderBy: { version: "asc" } }),
+      this.prisma.payment.findMany({ where: { invoice: { contractId: id } }, include: { recordedBy: { select: { name: true } } } }),
+    ]);
+    const invoiceIds = invoices.map((i) => i.id);
+    const auditLogs = await this.prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: "Contract", entityId: id },
+          { entityType: "ContractVersion", entityId: { in: versions.map((v) => v.id) } },
+          { entityType: "Invoice", entityId: { in: invoiceIds } },
+          { entityType: "Payment", entityId: { in: payments.map((p) => p.id) } },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      include: { actor: { select: { name: true } } },
+    });
+    const events: { type: string; description: string; actor: string | null; timestamp: Date }[] = [
+      ...auditLogs.map((l) => ({
+        type: l.action,
+        description: humanizeAction(l.action),
+        actor: l.actor?.name ?? null,
+        timestamp: l.createdAt,
+      })),
+      ...versions.map((v) => ({
+        type: "CONTRACT_VERSIONED",
+        description: `Contract version ${v.version} saved`,
+        actor: null,
+        timestamp: v.createdAt,
+      })),
+      ...invoices.map((i) => ({
+        type: "INVOICE_ISSUED",
+        description: `Invoice ${i.invoiceNumber} issued`,
+        actor: null,
+        timestamp: i.createdAt,
+      })),
+      ...payments.map((p) => ({
+        type: "PAYMENT_RECORDED",
+        description: `Payment of ${Number(p.amount).toFixed(2)} recorded`,
+        actor: p.recordedBy?.name ?? null,
+        timestamp: p.date,
+      })),
+    ];
+    return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }
+
   async update(user: AuthUser, id: string, dto: any) {
+
     const c = await this.get(user, id);
     if (user.role === "HIRING_ORG" && c.organizationId !== user.hiringOrgId) throw new ForbiddenException("Access denied");
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -133,3 +184,11 @@ export class ContractsService {
 async function nextVersion(latest: { version: number } | null): Promise<number> {
   return (latest?.version ?? 0) + 1;
 }
+
+function humanizeAction(action: string): string {
+  return action
+    .split("_")
+    .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+    .join(" ");
+}
+

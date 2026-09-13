@@ -18,31 +18,31 @@ export default function ContractsPage() {
       {!contracts ? <Loading /> : contracts.length === 0 ? (
         <Card><EmptyState icon={<FileSignature className="h-6 w-6" />} title="No contracts yet" description="Contracts are created once a quotation is accepted." /></Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {contracts.map((c) => (
-            <Card key={c.id}>
-              <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                <div className="min-w-0">
-                  <h3 className="truncate font-semibold text-charcoal">{c.title || c.serviceName || "Contract"}</h3>
-                  <p className="text-xs text-sage">{c.provider?.name} · {c.organization?.name}</p>
+            <Link key={c.id} href={`/contracts/${c.id}`} className="group">
+              <Card className="flex h-full flex-col transition-all group-hover:border-brass group-hover:shadow-raised">
+                <div className="flex items-start justify-between border-b border-border px-5 py-4">
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold text-charcoal group-hover:text-pine">{c.title || c.serviceName || "Contract"}</h3>
+                    <p className="truncate text-xs text-sage">{c.provider?.name || "Provider"} · {c.organization?.name}</p>
+                  </div>
+                  <StatusBadge status={c.status} />
                 </div>
-                <StatusBadge status={c.status} />
-              </div>
-              <div className="space-y-3 p-5">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-bold text-charcoal">{money(c.price)}</span>
-                  <span className="text-xs text-sage">{c.frequency ? `${c.frequency}` : "one-time"} · {dateShort(c.startDate)}{c.endDate ? ` – ${dateShort(c.endDate)}` : ""}</span>
+                <div className="flex flex-1 flex-col p-5">
+                  <p className="text-2xl font-bold text-charcoal">{money(c.price)}</p>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-sage">
+                    <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {c.building?.name || "—"}</span>
+                    <span className="flex items-center gap-1"><HardHat className="h-3.5 w-3.5" /> {c.jobs?.length ?? 0} jobs</span>
+                    <span>{dateShort(c.startDate)}{c.endDate ? ` – ${dateShort(c.endDate)}` : ""}</span>
+                    {c.frequency && <span className="font-medium text-charcoal">{c.frequency}</span>}
+                  </div>
+                  <div className="mt-auto pt-4">
+                    <Button variant="outline" className="w-full">View details</Button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <span className="flex items-center gap-1.5 text-sage"><Building2 className="h-4 w-4" /> {c.building?.name || "—"}</span>
-                  <span className="flex items-center gap-1.5 text-sage"><HardHat className="h-4 w-4" /> {c.jobs?.length ?? 0} jobs</span>
-                </div>
-                <div className="flex items-center gap-2 border-t border-border pt-3">
-                  <Link href={`/contracts/${c.id}`} className="flex-1"><Button variant="outline" size="sm" className="w-full">View details</Button></Link>
-                  {c.jobs?.length ? <Link href="/jobs"><Button size="sm">Jobs</Button></Link> : null}
-                </div>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

@@ -28,10 +28,12 @@ export default function ServiceRequestsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ title: "", description: "", categoryId: "", buildingId: "", floorId: "", areaId: "", priority: "NORMAL", budget: "", preferredDate: "" });
+  const [categories, setCategories] = useState<any[]>([]);
 
   const load = () => serviceRequestsApi.list().then((p) => setItems(p.data)).catch(() => setItems([]));
   useEffect(() => {
     load();
+    serviceRequestsApi.categories().then(setCategories).catch(() => setCategories([]));
     facilitiesApi.buildings().then((p) => {
       setBuildings(p.data);
     }).catch((err) => {
@@ -68,8 +70,15 @@ export default function ServiceRequestsPage() {
 
   const create = async () => {
     setError("");
-    if (!form.title.trim()) {
-      setError("Title is required.");
+    const selectedCategory = categories.find((c) => c.id === form.categoryId);
+    const isOther = form.categoryId === "OTHER";
+    const title = isOther ? form.title.trim() : selectedCategory?.name ?? "";
+    if (!form.categoryId) {
+      setError("Please select a category.");
+      return;
+    }
+    if (!title) {
+      setError("Please describe the service for the \"Other\" category.");
       return;
     }
     if (!form.buildingId) {
@@ -79,7 +88,7 @@ export default function ServiceRequestsPage() {
     setBusy(true);
     try {
       const payload: any = {
-        title: form.title.trim(),
+        title,
         description: form.description.trim(),
         buildingId: form.buildingId,
         priority: form.priority,
@@ -130,7 +139,7 @@ export default function ServiceRequestsPage() {
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto"><table className="w-full">
-            <thead className="bg-muted/50"><tr><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Request</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Building</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Budget</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Status</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Created</th></tr></thead>
+            <thead className="bg-pine/5"><tr><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Request</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Building</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Budget</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Status</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Created</th></tr></thead>
             <tbody className="divide-y divide-border">{filtered.map((r) => (
               <tr key={r.id} className="transition-colors hover:bg-muted/40">
                 <td className="px-4 py-3"><Link href={`/service-requests/${r.id}`} className="text-sm font-medium text-charcoal hover:text-pine">{r.title || "Untitled request"}</Link><p className="max-w-xs truncate text-xs text-sage">{r.description}</p></td>
@@ -151,8 +160,17 @@ export default function ServiceRequestsPage() {
               <span>{error}</span>
             </div>
           )}
-          <Field label="Title"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="HVAC repair" /></Field>
-          <Field label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe what is needed" /></Field>
+          <Field label="Category">
+            <Select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+              <option value="">Select a category…</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="OTHER">Other (describe below)</option>
+            </Select>
+          </Field>
+          {form.categoryId === "OTHER" && (
+            <Field label="Describe the service"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Water tank cleaning" /></Field>
+          )}
+          <Field label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Full details of what is needed" /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Building">
               <Select value={form.buildingId} onChange={(e) => setForm({ ...form, buildingId: e.target.value })}>

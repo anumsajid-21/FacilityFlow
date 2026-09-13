@@ -209,49 +209,42 @@ export default function QuotationsPage() {
         </>
       )}
 
-      {/* ── Hiring org: Compare & accept ── */}
+      {/* ── Hiring org: Compare & accept (provider-style cards) ── */}
       {!isProvider && (
         <>
           {!quotations ? <Loading /> : all.length === 0 ? (
             <Card><EmptyState icon={<Quote className="h-6 w-6" />} title="No quotations" description="Provider proposals will appear here for comparison once you submit service requests." /></Card>
           ) : (
-            <div className="space-y-6">
-              {all.map(([reqId, list]) => (
-                <div key={reqId}>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="font-semibold text-charcoal">{list[0]?.serviceRequest?.title || "Service request"}</h3>
-                    <span className="text-xs text-sage">Request: {reqId.slice(0, 8)}</span>
-                  </div>
-                  <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                    {list.map((q) => (
-                      <Card key={q.id} className={`flex flex-col p-5 ${q.status === "ACCEPTED" ? "border-pine ring-1 ring-pine/30" : ""}`}>
-                        <div className="flex items-start justify-between">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brass-soft font-bold text-[#7A5E2E]">
-                            {q.provider?.name?.slice(0, 1).toUpperCase()}
-                          </div>
-                          <StatusBadge status={q.status} />
-                        </div>
-                        <h4 className="mt-3 font-semibold text-charcoal">{q.provider?.name || "Provider"}</h4>
-                        <div className="mt-3 flex items-baseline gap-1">
-                          <span className="text-2xl font-bold text-charcoal">{money(q.price)}</span>
-                          {q.duration && <span className="text-sm text-sage">/ {q.duration}</span>}
-                        </div>
-                        <dl className="mt-4 space-y-2 text-sm">
-                          {q.numberOfWorkers ? <div className="flex justify-between"><dt className="text-sage">Workers</dt><dd className="font-medium text-charcoal">{q.numberOfWorkers}</dd></div> : null}
-                          {q.sla ? <div className="flex justify-between"><dt className="text-sage">SLA</dt><dd className="font-medium text-charcoal">{q.sla}</dd></div> : null}
-                          {q.expiryDate ? <div className="flex justify-between"><dt className="text-sage">Expires</dt><dd className="font-medium text-charcoal">{dateShort(q.expiryDate)}</dd></div> : null}
-                        </dl>
-                        {q.terms && <p className="mt-3 line-clamp-2 text-xs text-sage">{q.terms}</p>}
-                        <div className="mt-4 flex gap-2 border-t border-border pt-3">
-                          <Button size="sm" className="flex-1" disabled={q.status === "ACCEPTED" || q.status === "REJECTED"} loading={busy === q.id} onClick={() => accept(q.id)}>
-                            {q.status === "ACCEPTED" ? <><Check className="h-4 w-4" /> Selected</> : "Accept quotation"}
-                          </Button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {all.flatMap(([, list]) => list).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((q) => {
+                const accepted = q.status === "ACCEPTED";
+                return (
+                  <Card key={q.id} className={`flex flex-col ${accepted ? "border-pine ring-1 ring-pine/30" : ""}`}>
+                    <div className="flex items-start justify-between border-b border-border px-5 py-4">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold text-charcoal">{q.provider?.name || "Provider"}</h3>
+                        <p className="truncate text-xs text-sage">{q.serviceRequest?.title || "Service request"}</p>
+                      </div>
+                      <StatusBadge status={q.status} />
+                    </div>
+                    <div className="flex flex-1 flex-col p-5">
+                      <p className="text-2xl font-bold text-charcoal">{money(q.price)}</p>
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-sage">
+                        {q.duration && <span>Duration: <span className="font-medium text-charcoal">{q.duration}</span></span>}
+                        {q.numberOfWorkers && <span>Workers: <span className="font-medium text-charcoal">{q.numberOfWorkers}</span></span>}
+                        {q.sla && <span>SLA: <span className="font-medium text-charcoal">{q.sla}</span></span>}
+                        {q.expiryDate && <span>Expires: <span className="font-medium text-charcoal">{dateShort(q.expiryDate)}</span></span>}
+                      </div>
+                      {q.terms && <p className="mt-3 line-clamp-2 text-xs text-sage">{q.terms}</p>}
+                      <div className="mt-auto pt-4">
+                        <Button className="w-full" disabled={accepted || q.status === "REJECTED"} loading={busy === q.id} onClick={() => accept(q.id)}>
+                          {accepted ? <><Check className="h-4 w-4" /> Selected</> : "Accept quotation"}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </>

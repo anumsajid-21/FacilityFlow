@@ -213,10 +213,11 @@ const checkResults = await req("GET", `/checklists/jobs/${jobId}/results`, null,
 ok("job checklists results endpoint", checkResults.status === 200 && Array.isArray(data(checkResults)));
 
 // 19.7 Phase 3 features: Worker invitation, login, assigned jobs list, and proof of work submission
-const inviteRes = await req("POST", `/workers/${workerId}/invite`, { email: "worker1.e2e@facilityflow.app" }, provTok);
+const inviteEmail = `worker1.e2e.${Date.now()}@facilityflow.app`;
+const inviteRes = await req("POST", `/workers/${workerId}/invite`, { email: inviteEmail }, provTok);
 ok("worker invitation created user account", inviteRes.status === 200 || inviteRes.status === 201, `status=${inviteRes.status}`);
 
-const workerLogin = await req("POST", "/auth/login", { email: "worker1.e2e@facilityflow.app", password: "Worker123!" });
+const workerLogin = await req("POST", "/auth/login", { email: inviteEmail, password: "Worker123!" });
 const workerTok = data(workerLogin)?.access_token;
 ok("worker login succeeds", !!workerTok, `status=${workerLogin.status}`);
 

@@ -5,7 +5,6 @@ import { HardHat, ArrowRight, AlertTriangle } from "lucide-react";
 import { jobsApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, EmptyState, Loading, StatusBadge } from "@/components/ui/kit";
-import { Button } from "@/components/ui/button";
 import { dateShort } from "@/lib/utils";
 
 const COLUMNS = [
@@ -26,7 +25,7 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Jobs" subtitle={user?.role === "PROVIDER" ? "Today's work and upcoming assignments" : "Workflow across your active contracts"} actions={<Link href="/jobs"><Button>View workflow</Button></Link>} />
+      <PageHeader title="Jobs" subtitle={user?.role === "PROVIDER" ? "Today's work and upcoming assignments" : "Workflow across your active contracts"} />
 
       {jobs && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -52,11 +51,11 @@ export default function JobsPage() {
                   {items.length === 0 ? <p className="px-2 py-6 text-center text-xs text-sage">Empty</p> : items.map((j) => (
                     <Card key={j.id} className="group p-3 transition-all hover:border-brass">
                       <Link href={`/jobs/${j.id}`}>
-                        <p className="flex items-start justify-between gap-2">
-                          <span className="line-clamp-1 text-sm font-medium text-charcoal group-hover:text-pine">{j.title || j.serviceName || "Job"}</span>
-                          <StatusBadge status={j.status} className="shrink-0" />
+                        <p className="line-clamp-2 text-sm font-semibold leading-snug text-charcoal group-hover:text-pine">{j.title || j.serviceName || "Job"}</p>
+                        <p className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <StatusBadge status={j.status} className="shrink-0 !px-2 !py-0.5 !text-[10px]" />
+                          <span className="flex items-center gap-1 text-xs text-sage"><HardHat className="h-3 w-3" /> {dateShort(j.date)} · {j.contract?.provider?.name || j.contract?.organization?.name}</span>
                         </p>
-                        <p className="mt-1 flex items-center gap-1 text-xs text-sage"><HardHat className="h-3 w-3" /> {dateShort(j.date)} · {j.contract?.provider?.name || j.contract?.organization?.name}</p>
                         {j.sla?.status === "BREACHED" && <span className="mt-2 flex items-center gap-1 text-xs font-medium text-terracotta"><AlertTriangle className="h-3 w-3" /> SLA breached</span>}
                         <span className="mt-2 hidden items-center gap-1 text-xs font-medium text-pine group-hover:flex"><ArrowRight className="h-3 w-3" /> Open</span>
                       </Link>

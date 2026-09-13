@@ -117,7 +117,88 @@ export class InvoicesService {
     return payment;
   }
 
+  /** Org/provider-scoped payment history across all invoices, filterable. */
+  async paymentHistory(user: AuthUser, filters: { from?: string; to?: string; providerId?: string; category?: string }) {
+    const where = this.paymentWhere(user, filters);
+    const payments = await this.prisma.payment.findMany({
+      where,
+      orderBy: { date: "desc" },
+      include: {
+        invoice: {
+          include: {
+            provider: { select: { id: true, name: true } },
+            organization: { select: { id: true, name: true } },
+            contract: {
+              select: {
+                id: true, serviceName: true, title: true,
+                quotation: { select: { serviceRequest: { select: { category: { select: { name: true } } } } } },
+              },
+            },
+          },
+        },
+        recordedBy: { select: { id: true, name: true } },
+      },
+    });
+    const rows = payments.map((p) => ({
+      id: p.id,
+      date: p.date,
+      invoiceId: p.invoice.id,
+      invoiceNumber: p.invoice.invoiceNumber,
+      invoiceStatus: p.invoice.status,
+      providerId: p.invoice.provider.id,
+      providerName: p.invoice.provider.name,
+      organizationId: p.invoice.organization.id,
+      organizationName: p.invoice.organization.name,
+      category: p.invoice.contract?.quotation?.serviceRequest?.category?.name ?? p.invoice.contract?.serviceName ?? "General",
+      amount: Number(p.amount),
+      method: p.paymentMethod ?? "—",
+      reference: p.paymentReference ?? "—",
+      status: p.status,
+    }));
+    const total = rows.reduce((s, r) => s + r.amount, 0);
+    return { data: rows, total, count: rows.length };
+  }
+
+  /** CSV stream of the same payment history dataset. */
+  async paymentHistoryCsv(user: AuthUser, filters: { from?: string; to?: string; providerId?: string; category?: string }, res: any) {
+    const { data } = await this.paymentHistory(user, filters);
+    const esc = (v: any) => {
+      const s = v instanceof Date ? v.toISOString() : String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = "Date,Invoice #,Provider,Organization,Category,Amount,Method,Reference,Status";
+    const lines = data.map((r) =>
+      [new Date(r.date).toISOString().slice(0, 10), r.invoiceNumber, r.providerName, r.organizationName, r.category, r.amount.toFixed(2), r.method, r.reference, r.status].map(esc).join(","),
+    );
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="payment-history-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send([header, ...lines].join("\n"));
+  }
+
+  private paymentWhere(user: AuthUser, filters: { from?: string; to?: string; providerId?: string; category?: string }) {
+    const invWhere: any = {};
+    if (user.role === "PROVIDER" && user.providerId) invWhere.providerId = user.providerId;
+    else if (user.role === "HIRING_ORG" && user.hiringOrgId) invWhere.organizationId = user.hiringOrgId;
+    if (filters.providerId) invWhere.providerId = filters.providerId;
+    if (filters.category) {
+      invWhere.contract = {
+        OR: [
+          { serviceName: { contains: filters.category, mode: "insensitive" } },
+          { quotation: { serviceRequest: { category: { name: { contains: filters.category, mode: "insensitive" } } } } },
+        ],
+      };
+    }
+    const where: any = { invoice: invWhere };
+    if (filters.from || filters.to) {
+      where.date = {};
+      if (filters.from) where.date.gte = new Date(filters.from);
+      if (filters.to) where.date.lte = new Date(`${filters.to}T23:59:59.999Z`);
+    }
+    return where;
+  }
+
   async generatePdf(user: AuthUser, id: string, res: any) {
+
     const inv = await this.get(user, id);
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const PDFDocument = require("pdfkit");

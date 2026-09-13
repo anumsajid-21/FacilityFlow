@@ -12,7 +12,6 @@ export default function AdminPage() {
   const [tab, setTab] = useState("overview");
   const [orgs, setOrgs] = useState<any[] | null>(null);
   const [providers, setProviders] = useState<any[] | null>(null);
-  const [requests, setRequests] = useState<any[] | null>(null);
   const [buildings, setBuildings] = useState<any[] | null>(null);
   const [users, setUsers] = useState<any[] | null>(null);
   const [activity, setActivity] = useState<any[] | null>(null);
@@ -25,7 +24,6 @@ export default function AdminPage() {
     adminApi.dashboard().then(setDash).catch(() => setDash(undefined));
     adminApi.organizations().then(setOrgs).catch(() => setOrgs([]));
     adminApi.providers().then(setProviders).catch(() => setProviders([]));
-    adminApi.serviceRequests().then((p) => setRequests(p.data)).catch(() => setRequests([]));
     adminApi.buildings().then((p) => setBuildings(p.data)).catch(() => setBuildings([]));
     adminApi.users().then(setUsers).catch(() => setUsers([]));
     adminApi.activity().then(setActivity).catch(() => setActivity([]));
@@ -72,7 +70,6 @@ export default function AdminPage() {
           { key: "overview", label: "Overview" },
           { key: "organizations", label: "Organizations" },
           { key: "providers", label: "Providers" },
-          { key: "requests", label: "Service Requests" },
           { key: "buildings", label: "Buildings" },
           { key: "users", label: "Users" },
         ]}
@@ -81,34 +78,19 @@ export default function AdminPage() {
       />
 
       {tab === "overview" && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal">Recent service requests</h3></div>
-            {!requests ? <Loading /> : requests.length === 0 ? <div className="p-5 text-sm text-sage">No service requests yet.</div> : (
-              <div className="divide-y divide-border">
-                {requests.slice(0, 5).map((r) => (
-                  <div key={r.id} className="flex items-center justify-between px-5 py-3">
-                    <div className="min-w-0"><p className="truncate text-sm font-medium text-charcoal">{r.title}</p><p className="text-xs text-sage">{r.organization?.name} · {dateShort(r.createdAt)}</p></div>
-                    <StatusBadge status={r.status} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-          <Card>
-            <div className="border-b border-border px-5 py-4"><h3 className="flex items-center gap-2 font-semibold text-charcoal"><Activity className="h-4 w-4 text-pine" /> Recent activity</h3></div>
-            {!activity ? <Loading /> : activity.length === 0 ? <div className="p-5 text-sm text-sage">No recorded activity yet.</div> : (
-              <div className="divide-y divide-border">
-                {activity.slice(0, 8).map((a) => (
-                  <div key={a.id} className="px-5 py-2.5">
-                    <p className="text-sm text-charcoal">{humanize(a.action)} <span className="text-xs text-sage">· {a.entityType}</span></p>
-                    <p className="text-xs text-sage">{a.actor?.name ?? "System"} · {dateShort(a.createdAt)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
+        <Card>
+          <div className="border-b border-border px-5 py-4"><h3 className="flex items-center gap-2 font-semibold text-charcoal"><Activity className="h-4 w-4 text-pine" /> Recent activity</h3></div>
+          {!activity ? <Loading /> : activity.length === 0 ? <div className="p-5 text-sm text-sage">No recorded activity yet.</div> : (
+            <div className="divide-y divide-border">
+              {activity.slice(0, 8).map((a) => (
+                <div key={a.id} className="px-5 py-2.5">
+                  <p className="text-sm text-charcoal">{humanize(a.action)} <span className="text-xs text-sage">· {a.entityType}</span></p>
+                  <p className="text-xs text-sage">{a.actor?.name ?? "System"} · {dateShort(a.createdAt)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       )}
 
       {tab === "organizations" && (
@@ -132,7 +114,7 @@ export default function AdminPage() {
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-muted/50">
+                <thead className="bg-pine/5">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Provider</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Status</th>
@@ -162,44 +144,12 @@ export default function AdminPage() {
         )
       )}
 
-      {tab === "requests" && (
-        !requests ? <Loading /> : requests.length === 0 ? <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="No service requests" /></Card> : (
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Organization</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Building</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Created</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {requests.map((r) => (
-                    <tr key={r.id} className="hover:bg-muted/40">
-                      <td className="px-4 py-3 font-medium text-charcoal">{r.title}</td>
-                      <td className="px-4 py-3 text-sm text-sage">{r.organization?.name}</td>
-                      <td className="px-4 py-3 text-sm text-sage">{r.building?.name}</td>
-                      <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
-                      <td className="px-4 py-3 text-sm text-sage">{dateShort(r.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )
-      )}
-
-
       {tab === "buildings" && (
         !buildings ? <Loading /> : buildings.length === 0 ? <Card><EmptyState icon={<Home className="h-6 w-6" />} title="No buildings" /></Card> : (
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-muted/50">
+                <thead className="bg-pine/5">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Organization</th>
@@ -228,7 +178,7 @@ export default function AdminPage() {
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-muted/50">
+                <thead className="bg-pine/5">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Email</th>

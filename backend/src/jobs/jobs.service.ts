@@ -126,6 +126,75 @@ export class JobsService {
     return updated;
   }
 
+  /** Chronological activity timeline for a job (audit logs + derived events). */
+  async activity(user: AuthUser, id: string) {
+    const job = await this.load(user, id);
+    const assignments = await this.prisma.workerAssignment.findMany({ where: { jobId: id }, include: { worker: { select: { name: true } } } });
+    const approvals = await this.prisma.approval.findMany({ where: { jobId: id }, include: { approvedBy: { select: { name: true } } } });
+    const reworks = await this.prisma.reworkRequest.findMany({ where: { jobId: id }, include: { requester: { select: { name: true } } } });
+    const proofs = await this.prisma.proofOfWork.findMany({ where: { jobId: id } });
+    const invoices: { id: string; invoiceNumber: string; createdAt: Date }[] = await this.prisma.invoice.findMany({ where: { jobId: id }, select: { id: true, invoiceNumber: true, createdAt: true } });
+    const assignmentIds = assignments.map((a) => a.id);
+    const approvalIds = approvals.map((a) => a.id);
+    const reworkIds = reworks.map((r) => r.id);
+    const proofIds = proofs.map((p) => p.id);
+    const payments = await this.prisma.payment.findMany({ where: { invoice: { jobId: id } }, select: { id: true } });
+    const auditLogs = await this.prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: "Job", entityId: id },
+          { entityType: "WorkerAssignment", entityId: { in: assignmentIds } },
+          { entityType: "Approval", entityId: { in: approvalIds } },
+          { entityType: "ReworkRequest", entityId: { in: reworkIds } },
+          { entityType: "ProofOfWork", entityId: { in: proofIds } },
+          { entityType: "Invoice", entityId: { in: invoices.map((i) => i.id) } },
+          { entityType: "Payment", entityId: { in: payments.map((p) => p.id) } },
+        ],
+      },
+      include: { actor: { select: { name: true } } },
+    });
+    const events: { type: string; description: string; actor: string | null; timestamp: Date }[] = [
+      ...auditLogs.map((l) => ({
+        type: l.action,
+        description: l.action.split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" "),
+        actor: l.actor?.name ?? null,
+        timestamp: l.createdAt,
+      })),
+      ...assignments.map((a) => ({
+        type: "WORKER_ASSIGNED",
+        description: `Worker ${a.worker?.name ?? "assigned"} assigned to job`,
+        actor: null,
+        timestamp: a.assignedAt,
+      })),
+      ...approvals.map((a) => ({
+        type: a.decision === "APPROVED" ? "JOB_APPROVED" : "REWORK_REQUESTED",
+        description: a.decision === "APPROVED" ? "Job approved" : `Rework requested${a.notes ? `: ${a.notes}` : ""}`,
+        actor: a.approvedBy?.name ?? null,
+        timestamp: a.createdAt,
+      })),
+      ...reworks.map((r) => ({
+        type: "REWORK_REQUESTED",
+        description: `Rework requested: ${r.reason}`,
+        actor: r.requester?.name ?? null,
+        timestamp: r.createdAt,
+      })),
+      ...proofs.map((p) => ({
+        type: "PROOF_SUBMITTED",
+        description: `Proof of work submitted${p.providerNote ? `: ${p.providerNote}` : ""}`,
+        actor: null,
+        timestamp: p.completedAt,
+      })),
+      ...invoices.map((i) => ({
+        type: "INVOICE_ISSUED",
+        description: `Invoice ${i.invoiceNumber} issued`,
+        actor: null,
+        timestamp: i.createdAt,
+      })),
+      { type: "JOB_CREATED", description: `Job "${job.title ?? "scheduled"}" created`, actor: null, timestamp: job.createdAt },
+    ];
+    return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }
+
   /** Assign a worker to a job, enforcing no overlapping assignments. */
   async assignWorker(user: AuthUser, jobId: string, workerId: string) {
     const job = await this.load(user, jobId);

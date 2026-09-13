@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { TopBar } from "@/components/layout/TopBar";
 import { useAuthStore } from "@/store/auth";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -28,9 +29,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
-      </main>
+      <div className="flex flex-1 flex-col min-w-0">
+        <TopBar />
+        <main className="flex-1">
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

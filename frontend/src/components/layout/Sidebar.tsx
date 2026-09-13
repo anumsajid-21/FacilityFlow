@@ -14,14 +14,14 @@ import { cn } from "@/lib/utils";
 
 const ALL_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
-  { href: "/facilities", label: "Facilities", icon: Building2, roles: ["HIRING_ORG", "ADMIN"] },
-  { href: "/service-requests", label: "Service Requests", icon: FileText, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
+  { href: "/facilities", label: "Facilities", icon: Building2, roles: ["HIRING_ORG"] },
+  { href: "/service-requests", label: "Service Requests", icon: FileText, roles: ["HIRING_ORG"] },
   { href: "/providers", label: "Providers", icon: Users, roles: ["HIRING_ORG", "ADMIN"] },
   { href: "/quotations", label: "Quotations", icon: Quote, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/contracts", label: "Contracts", icon: FileSignature, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/jobs", label: "Jobs", icon: HardHat, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
   { href: "/workers", label: "Workers", icon: UserCheck, roles: ["PROVIDER"] },
-  { href: "/invoices", label: "Invoices", icon: ReceiptText, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
+  { href: "/invoices", label: "Invoices & Payments", icon: ReceiptText, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/reviews", label: "Reviews", icon: Star, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
   { href: "/notifications", label: "Notifications", icon: Bell, roles: ["HIRING_ORG", "PROVIDER", "ADMIN", "WORKER"] },
   { href: "/messages", label: "Messages", icon: MessageCircle, roles: ["HIRING_ORG", "PROVIDER", "ADMIN"] },
@@ -123,9 +123,23 @@ export function Sidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brass text-xs font-bold text-pine-darker">FF</div>
           <span className="font-semibold text-ivory">FacilityFlow</span>
         </div>
-        <button onClick={() => setMobileOpen(true)} className="rounded-lg p-1.5 text-ivory hover:bg-ivory/10" aria-label="Open menu">
-          <Menu className="h-6 w-6" />
-        </button>
+        <div className="flex items-center gap-1">
+          {role !== "WORKER" && (
+            <Link href="/messages" aria-label="Messages" className="relative rounded-lg p-1.5 text-ivory hover:bg-ivory/10">
+              <MessageCircle className="h-5 w-5" />
+              {unreadMessages > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 text-[10px] font-bold text-ivory">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
+            </Link>
+          )}
+          <Link href="/notifications" aria-label="Notifications" className="rounded-lg p-1.5 text-ivory hover:bg-ivory/10">
+            <Bell className="h-5 w-5" />
+          </Link>
+          <Link href="/settings" aria-label="Settings" className="rounded-lg p-1.5 text-ivory hover:bg-ivory/10">
+            <Settings className="h-5 w-5" />
+          </Link>
+          <button onClick={() => setMobileOpen(true)} className="rounded-lg p-1.5 text-ivory hover:bg-ivory/10" aria-label="Open menu">
+            <Menu className="h-6 w-6" />
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}

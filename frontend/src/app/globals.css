@@ -3,24 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --sand: #F3EFE7;
-  --ivory: #FFFDF8;
-  --pine: #173F38;
-  --pine-light: #1F534A;
-  --pine-darker: #0F2B26;
-  --terracotta: #B9553D;
-  --terracotta-hover: #96432F;
-  --terracotta-soft: #F6E3DC;
-  --brass: #C9A66B;
-  --brass-soft: #F2E8D5;
-  --charcoal: #172522;
-  --sage: #66736D;
-  --border: #E5E0D5;
-  --input: #DCD6C8;
-  --ring: #173F38;
-  --destructive: #A93226;
-  --muted: #EDE8DD;
-  --accent: #F2E8D5;
+  /* Light tint of sidebar pine (#0E3B4D) instead of pure white/sand */
+  --sand: #E3EBEF;
+  --ivory: #FFFFFF;
+  --pine: #114B5E;
+  --pine-light: #145A6E;
+  --pine-darker: #46172ade;
+  --terracotta: #F2A65A;
+  --terracotta-hover: #D9903E;
+  --terracotta-soft: #FEF3E2;
+  --brass: #7FA9B8;
+  --brass-soft: #DCEEF0;
+  --charcoal: #1F2D33;
+  --sage: #8C8171;
+  --border: #DFE6E9;
+  --input: #D3DDE2;
+  --ring: #0E3B4D;
+  --destructive: #C0392B;
+  --muted: #E4ECEF;
+  --accent: #DCEEF0;
 }
 
 body {

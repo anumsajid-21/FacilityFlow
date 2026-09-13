@@ -18,6 +18,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser, AuthUser } from '../common/decorators/user.decorator';
 import { ServiceRequestsService } from './service-requests.service';
 import { MatchingService } from '../matching/matching.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
@@ -41,7 +42,17 @@ class ServiceRequestDto {
 @Roles('HIRING_ORG', 'ADMIN')
 @Controller('api/v1/service-requests')
 export class ServiceRequestsController {
-  constructor(private readonly sr: ServiceRequestsService, private readonly matching: MatchingService) {}
+  constructor(
+    private readonly sr: ServiceRequestsService,
+    private readonly matching: MatchingService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /** Service categories for the request-creation dropdown (declared before ':id' routes). */
+  @Get('categories')
+  async categories() {
+    return this.prisma.serviceCategory.findMany({ orderBy: { name: 'asc' } });
+  }
 
   @Get()
   async list(@CurrentUser() user: AuthUser, @Query() q: PaginationDto) {

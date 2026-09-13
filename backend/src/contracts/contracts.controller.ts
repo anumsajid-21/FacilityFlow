@@ -41,14 +41,19 @@ export class ContractsController {
     return this.cs.createFromQuotation(user, dto);
   }
 
-  @Get(":id")
-  get(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
-    return this.cs.get(user, id);
+  @Get(":id/activity")
+  activity(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.cs.activity(user, id);
   }
 
   @Get(":id/versions")
   versions(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.cs.versions(user, id);
+  }
+
+  @Get(":id")
+  get(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.cs.get(user, id);
   }
 
   @Post(":id/snapshot")

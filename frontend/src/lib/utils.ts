@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function money(v: number | string | null | undefined): string {
   const n = Number(v ?? 0);
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  return `PKR ${n.toLocaleString("en-PK", { maximumFractionDigits: 0 })}`;
 }
 
 export function dateShort(d: string | Date | null | undefined): string {
@@ -40,34 +40,34 @@ export function todayISO(): string {
 /** Tailwind classes per status — earth palette. */
 export const statusStyles: Record<string, string> = {
   DRAFT: "bg-muted text-sage border-border",
-  OPEN: "bg-brass-soft text-[#7A5E2E] border-brass/40",
-  QUOTATIONS_RECEIVED: "bg-brass-soft text-[#7A5E2E] border-brass/40",
+  OPEN: "bg-terracotta-soft text-terracotta border-terracotta/40",
+  QUOTATIONS_RECEIVED: "bg-terracotta-soft text-terracotta border-terracotta/40",
   UNDER_REVIEW: "bg-[#EAE0F0] text-[#5B4A6B] border-[#C9B8DB]",
   PROVIDER_SELECTED: "bg-pine/10 text-pine border-pine/25",
   ACCEPTED: "bg-pine/10 text-pine border-pine/25",
-  SUBMITTED: "bg-brass-soft text-[#7A5E2E] border-brass/40",
-  REJECTED: "bg-terracotta-soft text-terracotta border-terracotta/30",
+  SUBMITTED: "bg-terracotta-soft text-terracotta border-terracotta/40",
+  REJECTED: "bg-[#FADBD8] text-[#C0392B] border-[#E6B0AA]",
   WITHDRAWN: "bg-muted text-sage border-border",
   EXPIRED: "bg-muted text-sage border-border",
   ACTIVE: "bg-pine/10 text-pine border-pine/25",
-  PENDING_APPROVAL: "bg-brass-soft text-[#7A5E2E] border-brass/40",
+  PENDING_APPROVAL: "bg-terracotta-soft text-terracotta border-terracotta/40",
   COMPLETED: "bg-pine/10 text-pine border-pine/25",
-  AWAITING_APPROVAL: "bg-brass-soft text-[#7A5E2E] border-brass/40",
-  IN_PROGRESS: "bg-[#E3EBE4] text-[#2F5D3A] border-[#B9CFBC]",
+  AWAITING_APPROVAL: "bg-terracotta-soft text-terracotta border-terracotta/40",
+  IN_PROGRESS: "bg-transparent text-[#0E5B6F] border-[#0E5B6F]/40",
   ASSIGNED: "bg-accent text-pine border-pine/25",
-  SCHEDULED: "bg-accent text-pine border-pine/25",
-  REWORK: "bg-terracotta-soft text-terracotta border-terracotta/30",
+  SCHEDULED: "bg-transparent text-pine border-pine/40",
+  REWORK: "bg-[#FADBD8] text-[#C0392B] border-[#E6B0AA]",
   CANCELLED: "bg-muted text-sage border-border",
-  TERMINATED: "bg-terracotta-soft text-terracotta border-terracotta/30",
+  TERMINATED: "bg-[#FADBD8] text-[#C0392B] border-[#E6B0AA]",
   CLOSED: "bg-muted text-sage border-border",
   ISSUED: "bg-accent text-pine border-pine/25",
-  PENDING: "bg-brass-soft text-[#7A5E2E] border-brass/40",
+  PENDING: "bg-terracotta-soft text-terracotta border-terracotta/40",
   PAID: "bg-pine/10 text-pine border-pine/25",
-  OVERDUE: "bg-terracotta-soft text-terracotta border-terracotta/30",
-  VERIFIED: "bg-pine/10 text-pine border-pine/25",
-  DOCUMENTS_SUBMITTED: "bg-brass-soft text-[#7A5E2E] border-brass/40",
+  OVERDUE: "bg-[#FADBD8] text-[#C0392B] border-[#E6B0AA]",
+  VERIFIED: "bg-[#DCEEF0] text-[#0E5B6F] border-pine/20",
+  DOCUMENTS_SUBMITTED: "bg-terracotta-soft text-terracotta border-terracotta/40",
   UNVERIFIED: "bg-muted text-sage border-border",
-  REJECTED_DOC: "bg-terracotta-soft text-terracotta border-terracotta/30",
+  REJECTED_DOC: "bg-[#FADBD8] text-[#C0392B] border-[#E6B0AA]",
 };
 
 export function statusClass(s: string | null | undefined): string {

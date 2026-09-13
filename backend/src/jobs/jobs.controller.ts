@@ -47,6 +47,11 @@ export class JobsController {
     return this.js.calendar(user, date);
   }
 
+  @Get(":id/activity")
+  activity(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.js.activity(user, id);
+  }
+
   @Get(":id")
   get(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.js.get(user, id);

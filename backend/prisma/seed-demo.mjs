@@ -312,39 +312,55 @@ const jobTemplates = [
       }
     }
   }
-// 6. Reviews for the demo providers.
+// 6. Reviews for the demo providers — guarantee >= 2 reviews per provider so
+  //    the provider "Reviews received" tab and the org Reviews table always
+  //    have data. Prefers COMPLETED jobs but falls back to any job status.
   const reviewSeeds = [
-    { providerIdx: 0, quality: 5, timeliness: 4, professionalism: 5, value: 4, overall: 4.5, comments: 'Reliable team with excellent communication and finish quality.' },
-    { providerIdx: 1, quality: 4, timeliness: 5, professionalism: 4, value: 4, overall: 4.3, comments: 'Technicians were punctual and very knowledgeable about HVAC systems.' },
-    { providerIdx: 2, quality: 5, timeliness: 5, professionalism: 5, value: 5, overall: 5.0, comments: 'Outstanding cleaning quality — the lobby looked brand new.' },
+    { quality: 5, timeliness: 4, professionalism: 5, value: 4, overall: 4.5, comments: 'Reliable team with excellent communication and finish quality.' },
+    { quality: 4, timeliness: 5, professionalism: 4, value: 4, overall: 4.3, comments: 'Technicians were punctual and very knowledgeable about the systems they serviced.' },
+    { quality: 5, timeliness: 5, professionalism: 5, value: 5, overall: 5.0, comments: 'Outstanding service quality — everything looked brand new afterwards.' },
   ];
-  for (const s of reviewSeeds) {
-    const { provider } = providers[s.providerIdx % providers.length];
-    const job = await prisma.job.findFirst({
-      where: { contract: { providerId: provider.id }, status: 'COMPLETED' },
+  for (const { provider } of providers) {
+    const jobs = await prisma.job.findMany({
+      where: { contract: { providerId: provider.id } },
+      orderBy: { createdAt: 'desc' },
     });
-    if (!job) continue;
-    await prisma.review.upsert({
-      where: {
-        organizationId_providerId_jobId: {
-          organizationId: org.id,
-          providerId: provider.id,
-          jobId: job.id,
+    const candidates = [
+      ...jobs.filter((j) => j.status === 'COMPLETED'),
+      ...jobs.filter((j) => j.status !== 'COMPLETED'),
+    ];
+    if (candidates.length === 0) continue;
+    const existing = await prisma.review.findMany({
+      where: { providerId: provider.id, organizationId: org.id },
+      select: { jobId: true },
+    });
+    const reviewedJobIds = new Set(existing.map((r) => r.jobId));
+    for (const s of reviewSeeds) {
+      const job = candidates.find((j) => !reviewedJobIds.has(j.id));
+      if (!job) break;
+      reviewedJobIds.add(job.id);
+      await prisma.review.upsert({
+        where: {
+          organizationId_providerId_jobId: {
+            organizationId: org.id,
+            providerId: provider.id,
+            jobId: job.id,
+          },
         },
-      },
-      update: {},
-      create: {
-        providerId: provider.id,
-        organizationId: org.id,
-        jobId: job.id,
-        quality: s.quality,
-        timeliness: s.timeliness,
-        professionalism: s.professionalism,
-        value: s.value,
-        overallRating: s.overall,
-        comments: s.comments,
-      },
-    });
+        update: {},
+        create: {
+          providerId: provider.id,
+          organizationId: org.id,
+          jobId: job.id,
+          quality: s.quality,
+          timeliness: s.timeliness,
+          professionalism: s.professionalism,
+          value: s.value,
+          overallRating: s.overall,
+          comments: s.comments,
+        },
+      });
+    }
   }
 
   // 7. Notifications for the demo users.

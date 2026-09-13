@@ -1,0 +1,71 @@
+﻿
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 6
+Line       :   --sand: #FBF6EF;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 8
+Line       :   --pine: #0E3B4D;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 9
+Line       :   --pine-light: #145A6E;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 14
+Line       :   --brass: #7FA9B8;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 15
+Line       :   --brass-soft: #DCEEF0;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 18
+Line       :   --border: #E2DDD5;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 19
+Line       :   --input: #D8D3CA;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 20
+Line       :   --ring: #0E3B4D;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 22
+Line       :   --muted: #EDE8DD;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 23
+Line       :   --accent: #DCEEF0;
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\app\globals.css
+LineNumber : 27
+Line       :   background-color: var(--sand);
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\lib\utils.ts
+LineNumber : 56
+Line       :   IN_PROGRESS: "bg-[#DCEEF0] text-[#0E5B6F] 
+             border-pine/25",
+
+Path       : C:\Users\Admin\Desktop\ANUM\Facility 
+             Service App\frontend\src\lib\utils.ts
+LineNumber : 67
+Line       :   VERIFIED: "bg-[#DCEEF0] text-[#0E5B6F] 
+             border-pine/20",
+
+
+

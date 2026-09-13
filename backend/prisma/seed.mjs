@@ -172,6 +172,8 @@ const DEMO_PROVIDERS = [
   { email: 'provider@facilityflow.app', password: 'Provide@12345', name: 'Demo Provider Manager', company: 'Demo Maintenance Pros' },
   { email: 'provider2@facilityflow.app', password: 'Provide@12345', name: 'Prime HVAC Manager', company: 'Prime HVAC Services' },
   { email: 'provider3@facilityflow.app', password: 'Provide@12345', name: 'SparkleClean Manager', company: 'SparkleClean Facility Care' },
+  { email: 'provider4@facilityflow.app', password: 'Provide@12345', name: 'Metro Electrical Manager', company: 'Metro Electrical Group', verificationStatus: 'DOCUMENTS_SUBMITTED' },
+  { email: 'provider5@facilityflow.app', password: 'Provide@12345', name: 'GreenLeaf Landscapes Manager', company: 'GreenLeaf Landscapes', verificationStatus: 'UNDER_REVIEW' },
 ];
 
 async function seedDemoProviders(categories) {
@@ -183,7 +185,7 @@ async function seedDemoProviders(categories) {
         data: {
           name: p.company,
           description: `${p.company} — professional facility services.`,
-          verificationStatus: 'VERIFIED',
+          verificationStatus: p.verificationStatus ?? 'VERIFIED',
           workforceCapacity: 15,
         },
       });
@@ -385,6 +387,8 @@ const DEMO_WORKERS = [
   { email: 'worker2@facilityflow.app', password: 'Worker123!', name: 'Jordan Lee', skills: 'HVAC, preventive maintenance', certifications: 'EPA 608', providerIndex: 1 },
   { email: 'worker3@facilityflow.app', password: 'Worker123!', name: 'Sam Patel', skills: 'Electrical, safety inspections', certifications: 'Licensed electrician', providerIndex: 0 },
   { email: 'worker4@facilityflow.app', password: 'Worker123!', name: 'Taylor Morgan', skills: 'Plumbing, general maintenance', certifications: 'OSHA 10', providerIndex: 0 },
+  { email: 'worker5@facilityflow.app', password: 'Worker123!', name: 'Riley Chen', skills: 'Electrical installations, panel upgrades', certifications: 'Master electrician', providerIndex: 3 },
+  { email: 'worker6@facilityflow.app', password: 'Worker123!', name: 'Morgan Diaz', skills: 'Landscaping, irrigation systems', certifications: 'Pesticide applicator', providerIndex: 4 },
 ];
 
 async function seedWorkers(providers) {
@@ -467,24 +471,6 @@ async function seedExtendedBusiness(org, providers, workers) {
     });
   }
 
-  async function seedSecondOrganization(categories) {
-    const categoryId = categories.get('Electrical');
-    let org = await prisma.organization.findFirst({ where: { name: 'Enterprise Campus Group' } });
-    if (!org) org = await prisma.organization.create({ data: { name: 'Enterprise Campus Group', description: 'Multi-site corporate campus demo tenant', contactEmail: 'ops@enterprise-campus.test' } });
-    let user = await prisma.user.findUnique({ where: { email: 'ops@facilityflow.app' } });
-    if (!user) {
-      user = await prisma.user.create({ data: { email: 'ops@facilityflow.app', password: await bcrypt.hash('Hire@12345', 12), name: 'Enterprise Operations Lead', role: 'HIRING_ORG', hiringOrgId: org.id } });
-      await prisma.organizationMember.create({ data: { organizationId: org.id, userId: user.id, role: 'ADMIN' } });
-    }
-    let building = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'Campus One' } });
-    if (!building) {
-      building = await prisma.building.create({ data: { organizationId: org.id, name: 'Campus One', address: '500 Innovation Way', city: 'Austin', buildingType: 'Campus', numberOfFloors: 3 } });
-      const floor = await prisma.floor.create({ data: { buildingId: building.id, name: 'Main Level' } });
-      const area = await prisma.area.create({ data: { floorId: floor.id, name: 'Electrical Room', category: 'Equipment room' } });
-      await prisma.serviceRequest.create({ data: { organizationId: org.id, createdById: user.id, categoryId, title: 'Campus electrical safety inspection', description: 'Annual inspection of panels and emergency lighting.', buildingId: building.id, floorId: floor.id, areaId: area.id, budget: 1800, priority: 'NORMAL', status: 'OPEN' } });
-    }
-    return org;
-  }
   const providerUser = await prisma.user.findFirst({ where: { providerId: contract.providerId, role: 'PROVIDER' } });
   const orgUser = await prisma.user.findFirst({ where: { hiringOrgId: org.id } });
   if (providerUser && orgUser) {
@@ -497,6 +483,122 @@ async function seedExtendedBusiness(org, providers, workers) {
   }
 }
 
+async function seedSecondOrganization(categories) {
+  const electricalId = categories.get('Electrical');
+  const cleaningId = categories.get('Commercial Cleaning');
+  const plumbingId = categories.get('Plumbing');
+  let org = await prisma.organization.findFirst({ where: { name: 'Metro Healthcare Group' } });
+  if (!org) org = await prisma.organization.create({ data: { name: 'Metro Healthcare Group', description: 'Regional healthcare facilities demo tenant', contactEmail: 'ops@metro-health.test' } });
+  let user = await prisma.user.findUnique({ where: { email: 'ops@metrohealth.app' } });
+  if (!user) {
+    user = await prisma.user.create({ data: { email: 'ops@metrohealth.app', password: await bcrypt.hash('Hire@12345', 12), name: 'Metro Healthcare Operations Lead', role: 'HIRING_ORG', hiringOrgId: org.id } });
+    await prisma.organizationMember.create({ data: { organizationId: org.id, userId: user.id, role: 'ADMIN' } });
+  }
+  const buildingsExist = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'Metro General Hospital' } });
+  if (buildingsExist) return org;
+
+  const metroElectrical = await prisma.provider.findFirst({ where: { name: 'Metro Electrical Group' } });
+  const demoProvider = await prisma.provider.findFirst({ where: { name: 'Demo Maintenance Pros' } });
+
+  const hospital = await prisma.building.create({ data: { organizationId: org.id, name: 'Metro General Hospital', address: '1200 Wellness Ave', city: 'Dallas', buildingType: 'Hospital', numberOfFloors: 4 } });
+  const adminB = await prisma.building.create({ data: { organizationId: org.id, name: 'Metro Administrative Center', address: '45 Care Blvd', city: 'Dallas', buildingType: 'Office', numberOfFloors: 2 } });
+  for (const [b, floors] of [[hospital, ['Level 1', 'Level 2', 'Level 3', 'Level 4']], [adminB, ['Ground Floor', 'Level 1']]]) {
+    for (const fname of floors) {
+      const floor = await prisma.floor.create({ data: { buildingId: b.id, name: fname } });
+      await prisma.area.create({ data: { floorId: floor.id, name: `${fname} Common Area`, category: 'Common area' } });
+      await prisma.area.create({ data: { floorId: floor.id, name: `${fname} Utility Room`, category: 'Equipment room' } });
+    }
+  }
+  return { org, user, categories: { electricalId, cleaningId, plumbingId }, metroElectrical, demoProvider, hospital, adminB };
+}
+
+async function seedMetroPipeline(ctx) {
+  const { org, user, categories, metroElectrical, demoProvider, hospital, adminB } = ctx;
+  const srSpecs = [
+    { title: 'Emergency generator inspection', category: categories.electricalId, building: hospital, status: 'OPEN', priority: 'HIGH' },
+    { title: 'Ward corridor deep cleaning', category: categories.cleaningId, building: hospital, status: 'QUOTATIONS_RECEIVED', priority: 'NORMAL' },
+    { title: 'Admin center panel upgrade', category: categories.electricalId, building: adminB, status: 'UNDER_REVIEW', priority: 'NORMAL' },
+    { title: 'Clinic plumbing leak repair', category: categories.plumbingId, building: hospital, status: 'PROVIDER_SELECTED', priority: 'HIGH' },
+    { title: 'Old boiler room decommission quote', category: categories.plumbingId, building: adminB, status: 'CANCELLED', priority: 'LOW' },
+    { title: 'Completed wing electrical refit', category: categories.electricalId, building: hospital, status: 'CLOSED', priority: 'NORMAL' },
+    { title: 'Draft: pediatric wing lighting', category: categories.electricalId, building: hospital, status: 'DRAFT', priority: 'LOW' },
+  ];
+  const createdSRs = [];
+  for (const spec of srSpecs) {
+    const floor = await prisma.floor.findFirst({ where: { buildingId: spec.building.id } });
+    const area = await prisma.area.findFirst({ where: { floorId: floor.id } });
+    const sr = await prisma.serviceRequest.create({ data: { organizationId: org.id, createdById: user.id, categoryId: spec.category, title: spec.title, description: `${spec.title} — seeded demo request.`, buildingId: spec.building.id, floorId: floor.id, areaId: area.id, budget: 900, priority: spec.priority, status: spec.status } });
+    createdSRs.push({ sr, spec });
+  }
+
+  const quoteStatuses = ['SUBMITTED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'];
+  const providersForQuotes = [metroElectrical, demoProvider].filter(Boolean);
+  let quoteIdx = 0;
+  for (const { sr, spec } of createdSRs) {
+    if (!['QUOTATIONS_RECEIVED', 'UNDER_REVIEW', 'PROVIDER_SELECTED'].includes(spec.status)) continue;
+    const provider = providersForQuotes[quoteIdx % providersForQuotes.length];
+    let status = quoteStatuses[quoteIdx % quoteStatuses.length];
+    if (spec.status === 'PROVIDER_SELECTED') status = 'ACCEPTED';
+    await prisma.quotation.create({ data: { serviceRequestId: sr.id, providerId: provider.id, price: 1500 + quoteIdx * 250, duration: `${10 + quoteIdx} days`, notes: `Seeded demo quotation (${status}).`, status, submittedAt: new Date() } });
+    quoteIdx++;
+  }
+
+  const acceptedQuote = await prisma.quotation.findFirst({ where: { serviceRequest: { organizationId: org.id }, status: 'ACCEPTED' }, include: { serviceRequest: true } });
+  if (acceptedQuote) {
+    await prisma.contract.create({ data: { organizationId: org.id, providerId: acceptedQuote.providerId, serviceRequestId: acceptedQuote.serviceRequestId, quotationId: acceptedQuote.id, buildingId: acceptedQuote.serviceRequest.buildingId, serviceName: 'Electrical', title: 'Clinic Electrical Works - Metro Health', price: 1750, startDate: new Date(Date.now() - 30 * 864e5), endDate: new Date(Date.now() + 335 * 864e5), sla: 'Resolution within 24 hours', status: 'ACTIVE' } });
+  }
+  const closedSR = createdSRs.find((c) => c.spec.status === 'CLOSED');
+  if (closedSR && demoProvider) {
+    const q = await prisma.quotation.create({ data: { serviceRequestId: closedSR.sr.id, providerId: demoProvider.id, price: 2600, duration: '14 days', notes: 'Completed historical work.', status: 'ACCEPTED', submittedAt: new Date(Date.now() - 310 * 864e5) } });
+    await prisma.contract.create({ data: { organizationId: org.id, providerId: demoProvider.id, serviceRequestId: closedSR.sr.id, quotationId: q.id, buildingId: closedSR.spec.building.id, serviceName: 'Electrical', title: 'Wing Electrical Refit - Completed', price: 2600, startDate: new Date(Date.now() - 300 * 864e5), endDate: new Date(Date.now() - 30 * 864e5), status: 'TERMINATED' } });
+  }
+
+  const activeContract = await prisma.contract.findFirst({ where: { organizationId: org.id, status: 'ACTIVE' }, include: { jobs: true } });
+  if (activeContract) {
+    const hospitalFloor = await prisma.floor.findFirst({ where: { buildingId: hospital.id } });
+    const hospitalArea = await prisma.area.findFirst({ where: { floorId: hospitalFloor.id } });
+    const jobSpecs = [
+      { title: 'Panel inspection - Level 2', daysOffset: -20, status: 'ACTIVE', slaBreached: true },
+      { title: 'Outlet replacement - Level 1', daysOffset: -5, status: 'REWORK', slaBreached: false },
+      { title: 'Generator test run', daysOffset: 5, status: 'SCHEDULED', slaBreached: false },
+      { title: 'Lighting retrofit - Level 3', daysOffset: 12, status: 'SCHEDULED', slaBreached: false },
+    ];
+    const metroJobs = [];
+    for (const spec of jobSpecs) {
+      const date = new Date(Date.now() + spec.daysOffset * 864e5);
+      const job = await prisma.job.create({ data: { contractId: activeContract.id, buildingId: hospital.id, floorId: hospitalFloor.id, areaId: hospitalArea.id, title: spec.title, location: `Metro General Hospital - ${spec.title}`, date, startTime: date, endTime: new Date(date.getTime() + 4 * 3600000), serviceName: 'Electrical', status: spec.status } });
+      metroJobs.push({ job, spec });
+      const slaPolicy = await prisma.slaPolicy.findFirst({ where: { providerId: activeContract.providerId } });
+      await prisma.jobSla.create({ data: { jobId: job.id, policyId: slaPolicy?.id, deadline: new Date(date.getTime() + (spec.slaBreached ? -12 : 48) * 3600000), breachedAt: spec.slaBreached ? new Date(date.getTime() + 60 * 3600000) : null } });
+    }
+    const reworkEntry = metroJobs.find((m) => m.spec.status === 'REWORK');
+    if (reworkEntry) {
+      await prisma.reworkRequest.create({ data: { jobId: reworkEntry.job.id, requestedById: user.id, reason: 'Two outlets failed post-inspection testing.' } });
+    }
+    // 6+ months of payment history across invoices
+    for (let m = 7; m >= 1; m--) {
+      const invMonth = new Date(Date.now() - m * 30 * 864e5);
+      const amount = 1400 + (m % 3) * 200;
+      const paid = m > 1;
+      const invNumber = `METRO-${String(1000 + m)}`;
+      const invoice = await prisma.invoice.upsert({ where: { invoiceNumber: invNumber }, update: {}, create: { invoiceNumber: invNumber, providerId: activeContract.providerId, organizationId: org.id, contractId: activeContract.id, amount, tax: Math.round(amount * 0.1), discount: 0, total: Math.round(amount * 1.1), dueDate: new Date(invMonth.getTime() + 21 * 864e5), status: paid ? 'PAID' : 'PENDING' } });
+      if (paid) {
+        await prisma.payment.create({ data: { invoiceId: invoice.id, amount: invoice.total, paymentReference: `METRO-PAY-${m}`, paymentMethod: 'BANK_TRANSFER', date: new Date(invMonth.getTime() + 18 * 864e5), status: 'COMPLETED', recordedById: user.id } });
+      }
+    }
+    await prisma.review.upsert({ where: { organizationId_providerId_jobId: { organizationId: org.id, providerId: activeContract.providerId, jobId: metroJobs[0].job.id } }, update: {}, create: { organizationId: org.id, providerId: activeContract.providerId, jobId: metroJobs[0].job.id, quality: 4, timeliness: 2, professionalism: 4, value: 3, overallRating: 3.25, comments: 'Work complete but SLA deadline was missed.' } });
+    await prisma.notification.createMany({ data: [
+      { userId: user.id, type: 'SLA_BREACH', title: 'SLA breached', message: 'Panel inspection job breached its SLA deadline.', isRead: true },
+      { userId: user.id, type: 'REWORK_REQUESTED', title: 'Rework requested', message: 'Outlet replacement job needs rework.', isRead: false },
+      { userId: user.id, type: 'INVOICE_ISSUED', title: 'New invoice', message: 'A new invoice is awaiting your payment.', isRead: false },
+    ] });
+    await prisma.auditLog.createMany({ data: [
+      { actorId: user.id, action: 'CONTRACT_CREATED', entityType: 'Contract', entityId: activeContract.id, details: 'Contract created via seed' },
+      { actorId: user.id, action: 'JOB_CREATED', entityType: 'Job', entityId: metroJobs[0].job.id, details: 'Panel inspection job created' },
+      { actorId: user.id, action: 'REWORK_REQUESTED', entityType: 'ReworkRequest', entityId: (reworkEntry?.job ?? metroJobs[1].job).id, details: 'Rework requested by org' },
+    ] });
+  }
+}
 async function main() {
   const categories = await seedCategories();
   await seedChecklists(categories);
@@ -509,12 +611,16 @@ async function main() {
     await seedBusinessData(org, providers, categories);
     await seedExtendedBusiness(org, providers, workers);
   }
-  await seedSecondOrganization(categories);
+  const metroCtx = await seedSecondOrganization(categories);
+  if (metroCtx && metroCtx.hospital) {
+    await seedMetroPipeline(metroCtx);
+  }
   console.log('\nDemo credentials');
   console.table([
     ...DEMO_USERS.map(({ email, password, role }) => ({ role, email, password })),
     { role: 'HIRING_ORG', email: 'ops@facilityflow.app', password: 'Hire@12345' },
-    ...DEMO_PROVIDERS.filter((p, i) => i > 0).map(({ email, password }) => ({ role: 'PROVIDER', email, password })),
+    { role: 'HIRING_ORG', email: 'ops@metrohealth.app', password: 'Hire@12345' },
+    ...DEMO_PROVIDERS.map(({ email, password }) => ({ role: 'PROVIDER', email, password })),
     ...DEMO_WORKERS.map(({ email, password }) => ({ role: 'WORKER', email, password })),
   ]);
   console.log('Seed complete: categories, checklists, demo organizations/providers/workers and business workflows are ready.');
@@ -526,3 +632,4 @@ main()
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
+

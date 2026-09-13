@@ -20,7 +20,13 @@ export class ServiceRequestsService {
     if (onlyOpen) where.status = { in: ["OPEN", "QUOTATIONS_RECEIVED", "UNDER_REVIEW", "PROVIDER_SELECTED"] };
     const [total, items] = await Promise.all([
       this.prisma.serviceRequest.count({ where }),
-      this.prisma.serviceRequest.findMany({ where, skip: (q.page - 1) * q.limit, take: q.limit, orderBy: { createdAt: "desc" } }),
+      this.prisma.serviceRequest.findMany({
+        where,
+        include: { building: { select: { name: true } } },
+        skip: (q.page - 1) * q.limit,
+        take: q.limit,
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
     return buildPage(items, total, q.page, q.limit);
   }

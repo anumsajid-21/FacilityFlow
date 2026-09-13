@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import { ReceiptText, Eye } from "lucide-react";
 import { invoicesApi, apiError } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
-import { Card, PageHeader, EmptyState, Loading, StatusBadge, Modal, Field, Input } from "@/components/ui/kit";
+import { Card, PageHeader, EmptyState, Loading, StatusBadge, Modal, Field, Input, Tabs } from "@/components/ui/kit";
+import { PaymentHistoryContent } from "@/components/payments/PaymentHistoryContent";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
 import { money, dateShort, timeShort } from "@/lib/utils";
@@ -55,11 +56,16 @@ export default function InvoicesPage() {
   };
 
   const totalOutstanding = (invoices ?? []).filter((i) => i.status === "PENDING" || i.status === "OVERDUE").reduce((s, i) => s + Number(i.total ?? 0), 0);
+  const [view, setView] = useState("invoices");
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Invoices" subtitle={isProvider ? "Invoices for your completed jobs" : "Billing across active contracts"} />
+      <PageHeader title="Invoices & Payments" subtitle={isProvider ? "Invoices and earnings for your completed jobs" : "Billing and payments across active contracts"} />
+      <Tabs tabs={[{ key: "invoices", label: "Invoices", count: invoices?.length }, { key: "payments", label: "Payment History" }]} active={view} onChange={(k) => setView(k as string)} />
 
+      {view === "payments" ? <PaymentHistoryContent /> : (
+      <>
+     
       {invoices && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card className="p-4"><p className="text-xs text-sage">Total billed</p><p className="mt-1 text-2xl font-bold text-charcoal">{money(invoices.reduce((s, i) => s + Number(i.total ?? 0), 0))}</p></Card>
@@ -74,7 +80,7 @@ export default function InvoicesPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-muted/50">
+              <thead className="bg-pine/5">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Invoice</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-sage">Amount</th>
@@ -129,9 +135,9 @@ export default function InvoicesPage() {
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><p className="text-xs text-sage">Provider</p><p className="font-medium text-charcoal">{detail.provider?.name ?? "—"}</p></div>
-              <div><p className="text-xs text-sage">Organization</p><p className="font-medium text-charcoal">{detail.organization?.name ?? "—"}</p></div>
-              <div><p className="text-xs text-sage">Service</p><p className="font-medium text-charcoal">{detail.contract?.serviceName ?? detail.job?.serviceName ?? "—"}</p></div>
+              <div><p className="text-xs text-sage">Provider</p><p className="font-medium text-charcoal">{detail.provider?.name ?? "â€”"}</p></div>
+              <div><p className="text-xs text-sage">Organization</p><p className="font-medium text-charcoal">{detail.organization?.name ?? "â€”"}</p></div>
+              <div><p className="text-xs text-sage">Service</p><p className="font-medium text-charcoal">{detail.contract?.serviceName ?? detail.job?.serviceName ?? "â€”"}</p></div>
               <div><p className="text-xs text-sage">Due date</p><p className="font-medium text-charcoal">{dateShort(detail.dueDate)}</p></div>
               <div><p className="text-xs text-sage">Amount</p><p className="font-medium text-charcoal">{money(detail.amount)}</p></div>
               <div><p className="text-xs text-sage">Total</p><p className="font-medium text-charcoal">{money(detail.total)}</p></div>
@@ -155,7 +161,7 @@ export default function InvoicesPage() {
                     <div key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
                       <div>
                         <p className="font-medium text-charcoal">{money(p.amount)}</p>
-                        <p className="text-xs text-sage">{dateShort(p.date)} {timeShort(p.date)} · {p.paymentMethod} · Ref: {p.paymentReference}</p>
+                        <p className="text-xs text-sage">{dateShort(p.date)} {timeShort(p.date)} Â· {p.paymentMethod} Â· Ref: {p.paymentReference}</p>
                       </div>
                       <StatusBadge status={p.status} />
                     </div>
@@ -185,6 +191,8 @@ export default function InvoicesPage() {
           </div>
         )}
       </Modal>
+      </>
+      )}
     </div>
   );
 }
