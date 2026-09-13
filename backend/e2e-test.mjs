@@ -36,7 +36,7 @@ ok("login new org", [200, 201].includes(login.status) && !!data(login)?.access_t
 const seeded = await req("POST", "/auth/login", { email: "hiring@facilityflow.app", password: "Hire@12345" });
 ok("login seeded account (existing accounts unbroken)", [200, 201].includes(seeded.status), `status=${seeded.status}`);
 const badLogin = await req("POST", "/auth/login", { email: `org${stamp}@t.com`, password: "wrong" });
-ok("wrong password rejected", badLogin.status === 401 || badLogin.status === 400);
+ok("wrong password rejected with correct error message", (badLogin.status === 401 || badLogin.status === 400) && badLogin.json?.message === "Incorrect password or username", `msg="${badLogin.json?.message}"`);
 
 // 4. org creates building + open service request
 const bld = await req("POST", "/facilities/buildings", { name: "E2E Tower", address: "1 Test St", city: "Testville", buildingType: "OFFICE", numberOfFloors: 1 }, orgTok);

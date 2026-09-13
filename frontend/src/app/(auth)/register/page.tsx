@@ -110,7 +110,64 @@ export default function RegisterPage() {
             </Field>
             <Field label="Password" error={errors.password?.message}>
               <Input type="password" placeholder="Min. 8 characters" {...register("password")} />
-              <p className="mt-1 text-xs text-sage">At least 8 characters with uppercase, lowercase, number and special character.</p>
+              
+              {/* Password Strength Indicator */}
+              {(() => {
+                const pass = watch("password") || "";
+                if (!pass) return (
+                  <p className="mt-1 text-xs text-sage">At least 8 characters with 1 uppercase, 1 lowercase, 1 number & 1 special character.</p>
+                );
+
+                const hasMin = pass.length >= 8;
+                const hasUpper = /[A-Z]/.test(pass);
+                const hasLower = /[a-z]/.test(pass);
+                const hasNum = /[0-9]/.test(pass);
+                const hasSpecial = /[^A-Za-z0-9]/.test(pass);
+
+                const score = [hasMin, hasUpper, hasLower, hasNum, hasSpecial].filter(Boolean).length;
+                let label = "Weak";
+                let colorClass = "bg-rose-500 text-rose-700";
+                let bgBarClass = "bg-rose-500";
+
+                if (score >= 5) {
+                  label = "Strong";
+                  colorClass = "text-emerald-700 font-bold";
+                  bgBarClass = "bg-emerald-500";
+                } else if (score >= 3) {
+                  label = "Medium";
+                  colorClass = "text-amber-700 font-bold";
+                  bgBarClass = "bg-amber-500";
+                } else {
+                  label = "Weak";
+                  colorClass = "text-rose-700 font-bold";
+                  bgBarClass = "bg-rose-500";
+                }
+
+                return (
+                  <div className="mt-2 space-y-1.5 rounded-lg border border-border bg-ivory p-2.5 shadow-sm">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-sage">Password strength:</span>
+                      <span className={cn("font-semibold uppercase tracking-wide", colorClass)}>{label}</span>
+                    </div>
+
+                    {/* 3-segment meter bar */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className={cn("h-1.5 rounded-full transition-all duration-300", score >= 1 ? bgBarClass : "bg-border")} />
+                      <div className={cn("h-1.5 rounded-full transition-all duration-300", score >= 3 ? bgBarClass : "bg-border")} />
+                      <div className={cn("h-1.5 rounded-full transition-all duration-300", score >= 5 ? bgBarClass : "bg-border")} />
+                    </div>
+
+                    {/* Requirements checklist */}
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-1 text-[11px]">
+                      <span className={hasMin ? "text-emerald-700 font-medium" : "text-sage"}>{hasMin ? "✓" : "○"} 8+ chars</span>
+                      <span className={hasUpper ? "text-emerald-700 font-medium" : "text-sage"}>{hasUpper ? "✓" : "○"} Uppercase</span>
+                      <span className={hasLower ? "text-emerald-700 font-medium" : "text-sage"}>{hasLower ? "✓" : "○"} Lowercase</span>
+                      <span className={hasNum ? "text-emerald-700 font-medium" : "text-sage"}>{hasNum ? "✓" : "○"} Number</span>
+                      <span className={hasSpecial ? "text-emerald-700 font-medium" : "text-sage"}>{hasSpecial ? "✓" : "○"} Special character</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </Field>
             <Button type="submit" className="w-full" disabled={isSubmitting} size="lg">
               {isSubmitting ? "Creating account…" : "Create account"} {!isSubmitting && <ArrowRight className="h-4 w-4" />}

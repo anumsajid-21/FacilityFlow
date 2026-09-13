@@ -59,9 +59,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
-    // 401 for unauthenticated should always say sign in.
+    // 401 for unauthenticated requests
     if (status === HttpStatus.UNAUTHORIZED) {
-      message = 'Your session is invalid or has expired. Please sign in again.';
+      if (request.url?.includes('/auth/login') || (typeof exception === 'object' && exception !== null && (exception as any).response?.message === 'Incorrect password or username')) {
+        message = 'Incorrect password or username';
+      } else {
+        message = 'Your session is invalid or has expired. Please sign in again.';
+      }
       error = 'Unauthorized';
     }
 

@@ -11,9 +11,24 @@ export default function NotificationsPage() {
   const [data, setData] = useState<{ notifications: any[]; unreadCount: number } | null>(null);
   const [busy, setBusy] = useState("");
 
-  const load = () =>
-    notificationsApi.list().then((d: any) => setData({ notifications: d?.notifications ?? [], unreadCount: d?.unreadCount ?? 0 })).catch(() => setData({ notifications: [], unreadCount: 0 }));
-  useEffect(() => { load(); }, []);
+  const load = async () => {
+    try {
+      const d: any = await notificationsApi.list();
+      setData({ notifications: d?.notifications ?? [], unreadCount: d?.unreadCount ?? 0 });
+    } catch {
+      setData({ notifications: [], unreadCount: 0 });
+    }
+  };
+
+  useEffect(() => {
+    notificationsApi.list().then(async (d: any) => {
+      setData({ notifications: d?.notifications ?? [], unreadCount: d?.unreadCount ?? 0 });
+      if ((d?.unreadCount ?? 0) > 0) {
+        await notificationsApi.markAllRead().catch(() => {});
+        setData((prev) => prev ? { notifications: prev.notifications.map((n) => ({ ...n, isRead: true })), unreadCount: 0 } : null);
+      }
+    }).catch(() => setData({ notifications: [], unreadCount: 0 }));
+  }, []);
 
   const markRead = async (id: string) => {
     setBusy(id);

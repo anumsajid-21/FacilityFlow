@@ -154,6 +154,7 @@ export const proofApi = {
   add: async (jobId: string, data: any, beforePhotoIds: string[] = [], afterPhotoIds: string[] = []) =>
     unwrap<any>(await api.post(`/jobs/${jobId}/proof`, { ...data, beforePhotoIds, afterPhotoIds })),
   get: async (jobId: string) => unwrap<any>(await api.get(`/jobs/${jobId}/proof`)),
+  byProvider: async (providerId: string) => unwrap<any[]>(await api.get(`/jobs/proof/by-provider/${providerId}`)),
 };
 
 export const approvalsApi = {

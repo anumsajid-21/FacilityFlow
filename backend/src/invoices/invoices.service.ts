@@ -98,7 +98,7 @@ export class InvoicesService {
       Number(inv.total),
       this.prisma.payment.aggregate({ where: { invoiceId: inv.id }, _sum: { amount: true } }).then((a) => Number(a._sum.amount ?? 0)),
     ]);
-    if (Number(dto.amount) > total - totalPaid) throw new BadRequestException("Payment exceeds outstanding balance");
+    if (Math.round(Number(dto.amount) * 100) > Math.round((total - totalPaid) * 100)) throw new BadRequestException("Payment exceeds outstanding balance");
     let finalStatus = inv.status as string;
     const payment = await this.prisma.$transaction(async (tx) => {
       const p = await tx.payment.create({

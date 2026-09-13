@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, Calendar } from "lucide-react";
 import { serviceRequestsApi, quotationsApi } from "@/services/api";
@@ -25,7 +25,7 @@ export default function ServiceRequestDetailPage() {
   const isHiring = user?.role === "HIRING_ORG" || user?.role === "ADMIN";
   const isProvider = user?.role === "PROVIDER";
 
-  const loadQuotes = () => quotationsApi.forRequest(id).then(setQuotations).catch(() => setQuotations([]));
+  const loadQuotes = useCallback(() => quotationsApi.forRequest(id).then(setQuotations).catch(() => setQuotations([])), [id]);
 
   const submit = async () => {
     setBusy("submit");
@@ -47,7 +47,7 @@ export default function ServiceRequestDetailPage() {
         setMatches(res.providers || []);
       }).catch(() => setMatches([]));
     }
-  }, [sr?.status, isHiring]);
+  }, [id, sr?.status, isHiring, loadQuotes]);
 
   if (sr === undefined) return <div className="rounded-xl border border-border bg-ivory p-6 text-sm text-sage">Request not found.</div>;
   if (!sr) return <Loading />;

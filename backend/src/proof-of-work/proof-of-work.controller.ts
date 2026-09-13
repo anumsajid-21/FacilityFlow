@@ -30,4 +30,9 @@ export class ProofOfWorkController {
   async get(@CurrentUser() user: AuthUser, @Param("jobId", ParseUUIDPipe) jobId: string) {
     return this.pow.get(user, jobId);
   }
+
+  @Get("proof/by-provider/:providerId")
+  async byProvider(@Param("providerId", ParseUUIDPipe) providerId: string) {
+    return this.pow.byProvider(providerId);
+  }
 }

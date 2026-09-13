@@ -34,7 +34,7 @@ export default function LoginPage() {
       setAuth(res.user, res.access_token);
       router.replace("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.message || "An error occurred during login");
+      setError(err.response?.data?.message || "Incorrect password or username");
     }
   };
 

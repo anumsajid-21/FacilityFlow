@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import {
@@ -40,9 +40,9 @@ export default function JobDetailPage() {
   const [tab, setTab] = useState<"overview" | "activity">("overview");
   const [activity, setActivity] = useState<any[] | null>(null);
 
-  const loadChecklists = () => {
+  const loadChecklists = useCallback(() => {
     checklistsApi.jobResults(id).then(setChecklistResults).catch(() => setChecklistResults([]));
-  };
+  }, [id]);
 
   const reload = async () => {
     const [j, aw] = await Promise.all([
@@ -64,7 +64,7 @@ export default function JobDetailPage() {
     approvalsApi.listForJob(id).then(setApprovals).catch(() => setApprovals([]));
     loadChecklists();
     jobsApi.activity(id).then(setActivity).catch(() => setActivity([]));
-  }, [id]);
+  }, [id, loadChecklists]);
 
   const isProvider = user?.role === "PROVIDER";
   const isHiring = user?.role === "HIRING_ORG" || user?.role === "ADMIN";
@@ -341,40 +341,84 @@ export default function JobDetailPage() {
       </Card>
 
       {/* Proof of Work display */}
-      {proof && (
-        <Card>
-          <div className="border-b border-border px-5 py-4"><h3 className="font-semibold text-charcoal flex items-center gap-2"><FileText className="h-4 w-4 text-pine" /> Proof of Work</h3></div>
-          <div className="space-y-3 p-5">
-            {proof.providerNote && <p className="text-sm text-charcoal"><span className="font-medium">Note:</span> {proof.providerNote}</p>}
-            {proof.completionNote && <p className="text-sm text-charcoal"><span className="font-medium">Completion:</span> {proof.completionNote}</p>}
-            {proof.workerName && <p className="text-xs text-sage">Worker: {proof.workerName}</p>}
-            {proof.beforePhotos?.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-medium text-sage uppercase tracking-wide">Before Photos</p>
-                <div className="flex flex-wrap gap-2">
-                  {proof.beforePhotos.map((f: any) => (
-                    <a key={f.id} href={filesApi.url(f.id)} target="_blank" rel="noopener" className="rounded border border-border bg-muted px-3 py-1.5 text-xs text-charcoal hover:border-brass">
-                      {f.originalName}
-                    </a>
-                  ))}
-                </div>
+      {proof ? (
+        <Card className="border-emerald-200/80 bg-emerald-50/10 shadow-sm">
+          <div className="border-b border-border px-5 py-4 flex items-center justify-between bg-emerald-50/30">
+            <h3 className="font-semibold text-charcoal flex items-center gap-2">
+              <Camera className="h-4 w-4 text-emerald-700" /> Proof of Work Submission
+            </h3>
+            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">
+              ✓ PROOF SUBMITTED
+            </span>
+          </div>
+          <div className="space-y-4 p-5">
+            {proof.workerName && (
+              <div className="flex items-center gap-2 text-xs font-medium text-sage">
+                <Users className="h-3.5 w-3.5 text-pine" /> Completed by: <span className="font-semibold text-charcoal">{proof.workerName}</span>
               </div>
             )}
-            {proof.afterPhotos?.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-medium text-sage uppercase tracking-wide">After Photos</p>
-                <div className="flex flex-wrap gap-2">
-                  {proof.afterPhotos.map((f: any) => (
-                    <a key={f.id} href={filesApi.url(f.id)} target="_blank" rel="noopener" className="rounded border border-border bg-muted px-3 py-1.5 text-xs text-charcoal hover:border-brass">
-                      {f.originalName}
-                    </a>
-                  ))}
-                </div>
+
+            {proof.providerNote && (
+              <div className="rounded-xl border border-border bg-white p-3.5 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-wider text-pine mb-1">Provider Diagnostic Note</p>
+                <p className="text-sm text-charcoal leading-relaxed">{proof.providerNote}</p>
               </div>
             )}
+
+            {proof.completionNote && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-1">Final Completion Summary</p>
+                <p className="text-sm text-charcoal leading-relaxed">{proof.completionNote}</p>
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2 pt-1">
+              {proof.beforePhotos?.length > 0 && (
+                <div className="rounded-xl border border-border bg-white p-3">
+                  <p className="mb-2 text-xs font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <Camera className="h-3.5 w-3.5 text-amber-700" /> Before Photos ({proof.beforePhotos.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {proof.beforePhotos.map((f: any) => (
+                      <a key={f.id} href={filesApi.url(f.id)} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 transition-colors">
+                        <FileText className="h-3.5 w-3.5 text-amber-700" />
+                        <span className="truncate max-w-[150px]">{f.originalName}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {proof.afterPhotos?.length > 0 && (
+                <div className="rounded-xl border border-border bg-white p-3">
+                  <p className="mb-2 text-xs font-bold text-emerald-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <Camera className="h-3.5 w-3.5 text-emerald-700" /> After Photos ({proof.afterPhotos.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {proof.afterPhotos.map((f: any) => (
+                      <a key={f.id} href={filesApi.url(f.id)} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100 transition-colors">
+                        <FileText className="h-3.5 w-3.5 text-emerald-700" />
+                        <span className="truncate max-w-[150px]">{f.originalName}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </Card>
-      )}
+      ) : isProvider && (job.status === "IN_PROGRESS" || job.status === "REWORK") ? (
+        <Card className="border-dashed border-2 border-brass/50 bg-brass-soft/20 p-5 text-center">
+          <Camera className="mx-auto h-8 w-8 text-pine mb-2" />
+          <h4 className="font-semibold text-sm text-charcoal">Proof of Work Needed</h4>
+          <p className="text-xs text-sage mt-1 max-w-md mx-auto">
+            Upload before & after photos, checklist items, and provider notes to submit this job for approval.
+          </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => setOpenProof(true)}>
+            <Camera className="mr-1.5 h-4 w-4" /> Add Proof of Work Now
+          </Button>
+        </Card>
+      ) : null}
 
       {/* Approvals History */}
       {approvals.length > 0 && (

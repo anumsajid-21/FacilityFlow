@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { MessageCircle, Send, Search, ArrowLeft, ChevronRight } from "lucide-react";
-import { messagingApi, apiError } from "@/services/api";
-import { Card, EmptyState, Loading, PageHeader } from "@/components/ui/kit";
+import { MessageCircle, Send, Search, ArrowLeft, ChevronRight, Plus, UserCheck, Building } from "lucide-react";
+import { messagingApi, providersApi, contractsApi, apiError } from "@/services/api";
+import { Card, EmptyState, Loading, PageHeader, Modal, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
 import { useAuthStore } from "@/store/auth";
@@ -19,6 +19,15 @@ export default function MessagesPage() {
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // New Chat modal state
+  const [newChatModal, setNewChatModal] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [selectedContact, setSelectedContact] = useState<any>(null);
+  const [newSubject, setNewSubject] = useState("");
+  const [initialMessage, setInitialMessage] = useState("");
+  const [startingChat, setStartingChat] = useState(false);
+
   const load = () => messagingApi.threads().then((r) => setThreads(r.threads ?? r)).catch(() => setThreads([]));
   useEffect(() => {
     load();
@@ -30,18 +39,75 @@ export default function MessagesPage() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [selected]);
 
+  const loadContacts = async () => {
+    try {
+      if (role === "HIRING_ORG" || role === "ADMIN") {
+        const res = await providersApi.list({ limit: 50 });
+        setContacts((res.data ?? []).map((p: any) => ({ id: p.id, name: p.name, type: "PROVIDER", sub: p.experience || "Service Provider" })));
+      } else {
+        const res = await contractsApi.list({ limit: 50 });
+        const orgs = (res.data ?? []).map((c: any) => ({
+          id: c.organizationId || c.organization?.id,
+          providerId: c.providerId,
+          name: c.organization?.name || "Hiring Organization",
+          type: "ORGANIZATION",
+          sub: `Contract: ${c.title}`,
+        })).filter((o: any) => o.id);
+        // unique by id
+        const uniqueOrgs = Array.from(new Map(orgs.map((o: any) => [o.id, o])).values());
+        setContacts(uniqueOrgs);
+      }
+    } catch {
+      setContacts([]);
+    }
+  };
+
+  const handleOpenNewChat = () => {
+    setNewChatModal(true);
+    loadContacts();
+  };
+
+  const handleStartChat = async () => {
+    if (!selectedContact || !newSubject.trim()) return;
+    setStartingChat(true);
+    try {
+      const dto = {
+        providerId: role === "HIRING_ORG" ? selectedContact.id : (useAuthStore.getState().user?.providerId ?? selectedContact.providerId),
+        organizationId: role === "PROVIDER" ? selectedContact.id : undefined,
+        subject: newSubject.trim(),
+        body: initialMessage.trim() || undefined,
+      };
+      const created = await messagingApi.create(dto);
+      setNewChatModal(false);
+      setSelectedContact(null);
+      setNewSubject("");
+      setInitialMessage("");
+      await load();
+      if (created?.id) open(created.id);
+      toast.success("Conversation started!");
+    } catch (e) {
+      toast.error("Failed to start conversation", apiError(e));
+    } finally {
+      setStartingChat(false);
+    }
+  };
+
   const open = async (id: string) => {
     try {
-      setSelected(await messagingApi.thread(id));
+      const threadData = await messagingApi.thread(id);
+      setSelected(threadData);
       setMobileChatOpen(true);
+      // Refresh thread list to clear unread indicator
+      load();
     } catch (e) { toast.error("Unable to open thread", apiError(e)); }
   };
+
   const send = async () => {
     if (!selected || !body.trim()) return;
     setBusy(true);
     try {
       const message = await messagingApi.send(selected.id, body);
-      setSelected({ ...selected, messages: [...selected.messages, message] });
+      setSelected({ ...selected, messages: [...(selected.messages || []), message] });
       setBody("");
       load();
     } catch (e) { toast.error("Message failed", apiError(e)); } finally { setBusy(false); }
@@ -67,14 +133,16 @@ export default function MessagesPage() {
     const last = lastMessage(t);
     const haystack = [t.subject, t.organization?.name, t.provider?.name, last?.body, contextTag(t)]
       .filter(Boolean).join(" ").toLowerCase();
-    // match any word prefix (e.g. "prime" or "hvac" match "Prime HVAC Services")
     return q.split(/\s+/).filter(Boolean).some((w) => haystack.includes(w));
   });
 
-  // autocomplete suggestions: matching contact names while typing
   const allNames = Array.from(new Set((threads ?? []).map((t) => threadTitle(t)).filter(Boolean)));
   const suggestions = q ? allNames.filter((n) => n.toLowerCase().includes(q)).slice(0, 5) : [];
 
+  const filteredContacts = contacts.filter((c) => {
+    if (!contactSearch.trim()) return true;
+    return c.name.toLowerCase().includes(contactSearch.toLowerCase()) || c.sub?.toLowerCase().includes(contactSearch.toLowerCase());
+  });
 
   const chatHeader = selected && (
     <div className="flex items-center gap-3 border-b border-border bg-ivory px-4 py-3">
@@ -96,17 +164,24 @@ export default function MessagesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Messages" subtitle="One unified inbox for everything — requests, quotations, contracts and jobs." />
-      {!threads ? <Loading /> : threads.length === 0 ? (
-        <Card><EmptyState icon={<MessageCircle className="h-6 w-6" />} title="No conversations yet" description={role === "HIRING_ORG" ? "Start a conversation from a provider or contract." : "Messages from hiring organizations will appear here."} /></Card>
-      ) : (
+      <PageHeader
+        title="Messages"
+        subtitle="One unified inbox for everything — requests, quotations, contracts and jobs."
+        actions={
+          <Button onClick={handleOpenNewChat} size="sm" className="gap-2">
+            <Plus className="h-4 w-4" /> New Conversation
+          </Button>
+        }
+      />
+
+      {!threads ? <Loading /> : (
         <div className={cn("grid gap-4 lg:grid-cols-[340px_1fr]", mobileChatOpen && "hidden lg:grid")}>
           {/* Thread list */}
           <Card className={cn("flex max-h-[70vh] min-h-[420px] flex-col overflow-hidden", mobileChatOpen ? "hidden lg:flex" : "")}>
-            <div className="border-b border-border p-3">
+            <div className="border-b border-border p-3 space-y-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sage" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations"
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..."
                   className="h-10 w-full rounded-full border border-border bg-muted/50 pl-9 pr-3 text-sm text-charcoal outline-none placeholder:text-sage/70 focus:border-brass" />
                 {suggestions.length > 0 && (
                   <div className="absolute left-0 right-0 top-12 z-10 overflow-hidden rounded-xl border border-border bg-ivory shadow-raised">
@@ -121,9 +196,15 @@ export default function MessagesPage() {
                 )}
               </div>
             </div>
+
             <div className="flex-1 divide-y divide-border overflow-y-auto">
               {filtered.length === 0 ? (
-                <p className="p-6 text-center text-sm text-sage">No conversations match “{search}”.</p>
+                <div className="p-6 text-center text-sm text-sage">
+                  <p>No conversations match “{search}”.</p>
+                  <Button variant="outline" size="sm" onClick={handleOpenNewChat} className="mt-3">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" /> Start new chat
+                  </Button>
+                </div>
               ) : filtered.map((t) => {
                 const last = lastMessage(t);
                 const unread = Number(t.unreadCount ?? 0);
@@ -162,7 +243,7 @@ export default function MessagesPage() {
           {/* Chat view */}
           <Card className={cn("flex min-h-[420px] max-h-[70vh] flex-col overflow-hidden", !mobileChatOpen && "hidden lg:flex")}>
             {!selected ? (
-              <EmptyState icon={<MessageCircle className="h-6 w-6" />} title="Select a conversation" description="Pick a thread from the inbox to see the full conversation." />
+              <EmptyState icon={<MessageCircle className="h-6 w-6" />} title="Select a conversation" description="Pick a thread from the inbox or start a new conversation." />
             ) : (
               <div className="flex min-h-0 flex-1 flex-col">
                 {chatHeader}
@@ -196,6 +277,80 @@ export default function MessagesPage() {
           </Card>
         </div>
       )}
+
+      {/* New Conversation Modal */}
+      <Modal open={newChatModal} onClose={() => setNewChatModal(false)} title="Start New Conversation">
+        <div className="space-y-4">
+          <Field label={role === "HIRING_ORG" ? "Select Service Provider" : "Select Hiring Organization"}>
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sage" />
+              <Input
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                placeholder={role === "HIRING_ORG" ? "Search providers by name..." : "Search organizations by name..."}
+                className="pl-9"
+              />
+            </div>
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-ivory divide-y divide-border">
+              {filteredContacts.length === 0 ? (
+                <p className="p-4 text-center text-xs text-sage">No contacts found</p>
+              ) : (
+                filteredContacts.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedContact(c)}
+                    className={cn(
+                      "flex w-full items-center justify-between p-3 text-left transition-colors hover:bg-sand/40",
+                      selectedContact?.id === c.id && "bg-brass-soft/50 border-l-4 border-pine"
+                    )}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-charcoal">{c.name}</p>
+                      <p className="text-xs text-sage">{c.sub}</p>
+                    </div>
+                    {c.type === "PROVIDER" ? <UserCheck className="h-4 w-4 text-pine" /> : <Building className="h-4 w-4 text-pine" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </Field>
+
+          {selectedContact && (
+            <div className="rounded-lg bg-sand/30 p-3 text-xs text-charcoal border border-border">
+              Selected: <span className="font-semibold text-pine">{selectedContact.name}</span>
+            </div>
+          )}
+
+          <Field label="Subject / Topic">
+            <Input
+              value={newSubject}
+              onChange={(e) => setNewSubject(e.target.value)}
+              placeholder="e.g. Schedule inquiry, Job quotation inquiry..."
+            />
+          </Field>
+
+          <Field label="Initial Message (Optional)">
+            <Textarea
+              value={initialMessage}
+              onChange={(e) => setInitialMessage(e.target.value)}
+              placeholder="Type your introductory message..."
+              rows={3}
+            />
+          </Field>
+
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setNewChatModal(false)}>Cancel</Button>
+            <Button
+              onClick={handleStartChat}
+              disabled={startingChat || !selectedContact || !newSubject.trim()}
+              loading={startingChat}
+            >
+              Start Chat
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

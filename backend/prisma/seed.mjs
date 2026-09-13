@@ -502,14 +502,22 @@ async function seedSecondOrganization(categories) {
 
   const hospital = await prisma.building.create({ data: { organizationId: org.id, name: 'Metro General Hospital', address: '1200 Wellness Ave', city: 'Dallas', buildingType: 'Hospital', numberOfFloors: 4 } });
   const adminB = await prisma.building.create({ data: { organizationId: org.id, name: 'Metro Administrative Center', address: '45 Care Blvd', city: 'Dallas', buildingType: 'Office', numberOfFloors: 2 } });
-  for (const [b, floors] of [[hospital, ['Level 1', 'Level 2', 'Level 3', 'Level 4']], [adminB, ['Ground Floor', 'Level 1']]]) {
+  const westsideB = await prisma.building.create({ data: { organizationId: org.id, name: 'Westside Industrial Park', address: '880 Logistics Way', city: 'Dallas', buildingType: 'Warehouse', numberOfFloors: 3 } });
+  const techCampusB = await prisma.building.create({ data: { organizationId: org.id, name: 'Sunrise Tech Campus', address: '101 Innovation Dr', city: 'Dallas', buildingType: 'Data Center', numberOfFloors: 5 } });
+
+  for (const [b, floors] of [
+    [hospital, ['Level 1', 'Level 2', 'Level 3', 'Level 4']],
+    [adminB, ['Ground Floor', 'Level 1']],
+    [westsideB, ['Bay A - Ground', 'Bay B - Mezzanine', 'Bay C - Storage']],
+    [techCampusB, ['Floor 1 - Reception', 'Floor 2 - Labs', 'Floor 3 - Server Room', 'Floor 4 - Executive', 'Floor 5 - Rooftop HVAC']],
+  ]) {
     for (const fname of floors) {
       const floor = await prisma.floor.create({ data: { buildingId: b.id, name: fname } });
       await prisma.area.create({ data: { floorId: floor.id, name: `${fname} Common Area`, category: 'Common area' } });
       await prisma.area.create({ data: { floorId: floor.id, name: `${fname} Utility Room`, category: 'Equipment room' } });
     }
   }
-  return { org, user, categories: { electricalId, cleaningId, plumbingId }, metroElectrical, demoProvider, hospital, adminB };
+  return { org, user, categories: { electricalId, cleaningId, plumbingId }, metroElectrical, demoProvider, hospital, adminB, westsideB, techCampusB };
 }
 
 async function seedMetroPipeline(ctx) {
@@ -558,10 +566,16 @@ async function seedMetroPipeline(ctx) {
     const hospitalFloor = await prisma.floor.findFirst({ where: { buildingId: hospital.id } });
     const hospitalArea = await prisma.area.findFirst({ where: { floorId: hospitalFloor.id } });
     const jobSpecs = [
-      { title: 'Panel inspection - Level 2', daysOffset: -20, status: 'ACTIVE', slaBreached: true },
+      { title: 'Panel inspection - Level 2', daysOffset: -20, status: 'IN_PROGRESS', slaBreached: true },
+      { title: 'HVAC Filter & Duct Sanitize', daysOffset: -2, status: 'IN_PROGRESS', slaBreached: false },
       { title: 'Outlet replacement - Level 1', daysOffset: -5, status: 'REWORK', slaBreached: false },
+      { title: 'Fire Alarm Sensor Calibration', daysOffset: -1, status: 'REWORK', slaBreached: false },
       { title: 'Generator test run', daysOffset: 5, status: 'SCHEDULED', slaBreached: false },
       { title: 'Lighting retrofit - Level 3', daysOffset: 12, status: 'SCHEDULED', slaBreached: false },
+      { title: 'Emergency Transformer Repair', daysOffset: -10, status: 'COMPLETED', slaBreached: false },
+      { title: 'Main Switchboard Thermography', daysOffset: -8, status: 'COMPLETED', slaBreached: false },
+      { title: 'Elevator Shaft Wiring Audit', daysOffset: -3, status: 'AWAITING_APPROVAL', slaBreached: false },
+      { title: 'Chiller Water Line Inspection', daysOffset: -1, status: 'AWAITING_APPROVAL', slaBreached: false },
     ];
     const metroJobs = [];
     for (const spec of jobSpecs) {
@@ -570,6 +584,44 @@ async function seedMetroPipeline(ctx) {
       metroJobs.push({ job, spec });
       const slaPolicy = await prisma.slaPolicy.findFirst({ where: { providerId: activeContract.providerId } });
       await prisma.jobSla.create({ data: { jobId: job.id, policyId: slaPolicy?.id, deadline: new Date(date.getTime() + (spec.slaBreached ? -12 : 48) * 3600000), breachedAt: spec.slaBreached ? new Date(date.getTime() + 60 * 3600000) : null } });
+
+      // Seed Proof of Work for completed, awaiting_approval, rework, and in_progress jobs
+      if (['IN_PROGRESS', 'AWAITING_APPROVAL', 'COMPLETED', 'REWORK'].includes(spec.status)) {
+        const slug = spec.title.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const beforeFile = await prisma.file.create({
+          data: {
+            originalName: `${slug}_before_inspection.jpg`,
+            mimeType: 'image/jpeg',
+            size: 185400,
+            storageKey: `demo_files/${job.id}_before.jpg`,
+            kind: 'JOB_PHOTO',
+            uploadedById: user.id,
+          },
+        });
+        const afterFile = await prisma.file.create({
+          data: {
+            originalName: `${slug}_after_completion.jpg`,
+            mimeType: 'image/jpeg',
+            size: 214900,
+            storageKey: `demo_files/${job.id}_after.jpg`,
+            kind: 'JOB_PHOTO',
+            uploadedById: user.id,
+          },
+        });
+        await prisma.proofOfWork.create({
+          data: {
+            jobId: job.id,
+            providerNote: `Safety procedures & diagnostic checks initialized for ${spec.title}. Work zone isolated.`,
+            completionNote: spec.status === 'REWORK'
+              ? 'Re-inspected wiring connections and replaced faulty fuse blocks.'
+              : `All task steps completed per standards for ${spec.title}. Final inspection verified.`,
+            completedById: user.id,
+            workerName: 'Certified Electrical Tech (Demo Provider)',
+            beforePhotos: { connect: [{ id: beforeFile.id }] },
+            afterPhotos: { connect: [{ id: afterFile.id }] },
+          },
+        });
+      }
     }
     const reworkEntry = metroJobs.find((m) => m.spec.status === 'REWORK');
     if (reworkEntry) {

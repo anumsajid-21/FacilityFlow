@@ -49,7 +49,7 @@ export const statusStyles: Record<string, string> = {
   REJECTED: "bg-[#FADBD8] text-[#C0392B] border-[#E6B0AA]",
   WITHDRAWN: "bg-muted text-sage border-border",
   EXPIRED: "bg-muted text-sage border-border",
-  ACTIVE: "bg-pine/10 text-pine border-pine/25",
+  ACTIVE: "bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold",
   PENDING_APPROVAL: "bg-terracotta-soft text-terracotta border-terracotta/40",
   COMPLETED: "bg-pine/10 text-pine border-pine/25",
   AWAITING_APPROVAL: "bg-terracotta-soft text-terracotta border-terracotta/40",

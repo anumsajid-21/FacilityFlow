@@ -10,6 +10,8 @@ import { IsNumber, IsOptional, IsString } from "class-validator";
 class PaymentRecordDto {
   @IsNumber() amount: number;
   @IsString() paymentMethod: string;
+  @IsOptional() @IsString() paymentReference?: string;
+  @IsOptional() @IsString() reference?: string;
   @IsOptional() date?: string;
 }
 

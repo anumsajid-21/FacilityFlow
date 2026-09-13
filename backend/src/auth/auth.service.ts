@@ -114,14 +114,14 @@ export class AuthService {
       select: { id: true, email: true, name: true, password: true, role: true, hiringOrgId: true, providerId: true, isActive: true },
     });
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Incorrect password or username');
     }
     if (!user.isActive) {
       throw new UnauthorizedException('This account has been disabled');
     }
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Incorrect password or username');
     }
     return {
       access_token: this.sign(user),

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { X, CheckCircle2, AlertTriangle, Info } from "lucide-react";
 
@@ -35,8 +36,14 @@ const icons: Record<ToastKind, React.ReactNode> = {
 };
 
 export function Toaster() {
+  const [mounted, setMounted] = useState(false);
   const { toasts, dismiss } = useToastStore();
-  if (typeof window === "undefined") return null;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex w-80 flex-col gap-2">
       {toasts.map((t) => (

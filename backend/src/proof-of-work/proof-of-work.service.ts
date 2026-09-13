@@ -56,4 +56,26 @@ export class ProofOfWorkService {
     if (!proof) throw new NotFoundException("No proof of work for this job");
     return proof;
   }
+
+  async byProvider(providerId: string) {
+    return this.prisma.proofOfWork.findMany({
+      where: { job: { contract: { providerId } } },
+      include: {
+        beforePhotos: true,
+        afterPhotos: true,
+        job: {
+          select: {
+            id: true,
+            title: true,
+            serviceName: true,
+            date: true,
+            status: true,
+            building: { select: { name: true } },
+          },
+        },
+        completer: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { completedAt: "desc" },
+    });
+  }
 }
