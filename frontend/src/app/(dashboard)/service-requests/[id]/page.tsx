@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MapPin, Calendar } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Sparkles } from "lucide-react";
 import { serviceRequestsApi, quotationsApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, Loading, StatusBadge, Tabs } from "@/components/ui/kit";
@@ -37,6 +37,8 @@ export default function ServiceRequestDetailPage() {
     try { await quotationsApi.accept(qid); toast.success("Quotation accepted"); loadQuotes(); }
     catch (e: any) { toast.error("Failed", e?.message); } finally { setBusy(""); }
   };
+
+  const recommended = quotations?.filter((q) => ["SUBMITTED", "SHORTLISTED", "UNDER_REVIEW"].includes(q.status)).sort((a, b) => Number(a.price) - Number(b.price))[0];
 
   const [matches, setMatches] = useState<any[]>([]);
 
@@ -112,10 +114,10 @@ export default function ServiceRequestDetailPage() {
           ) : (
             <div className="grid gap-3 lg:grid-cols-3">
               {quotations.map((q) => (
-                <Card key={q.id} className={`p-5 ${q.status === "ACCEPTED" ? "border-pine ring-1 ring-pine/30" : ""}`}>
+                <Card key={q.id} className={`p-5 ${q.status === "ACCEPTED" || recommended?.id === q.id ? "border-pine ring-1 ring-pine/30" : ""}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brass-soft font-bold text-[#7A5E2E]">{q.provider?.name?.slice(0, 1).toUpperCase()}</div>
-                    <StatusBadge status={q.status} />
+                    <div className="flex flex-col items-end gap-1"><StatusBadge status={q.status} />{recommended?.id === q.id && <span className="flex items-center gap-1 text-[11px] font-bold text-pine"><Sparkles className="h-3 w-3" /> Recommended</span>}</div>
                   </div>
                   <h4 className="mt-3 font-semibold text-charcoal">{q.provider?.name || "Provider"}</h4>
                   <p className="mt-1 text-2xl font-bold text-charcoal">{money(q.price)}</p>

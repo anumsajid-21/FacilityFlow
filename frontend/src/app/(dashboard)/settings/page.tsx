@@ -178,6 +178,18 @@ export default function SettingsPage() {
     }
   };
 
+  const handleImageSelect = (field: "avatarUrl" | "providerLogoUrl") => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
+      toast.error("Invalid image", "Choose an image smaller than 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setProfileForm((current) => ({ ...current, [field]: String(reader.result) }));
+    reader.readAsDataURL(file);
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
@@ -309,6 +321,16 @@ export default function SettingsPage() {
               <Field label="Avatar URL">
                 <Input value={profileForm.avatarUrl} placeholder="https://..." onChange={(e) => setProfileForm({ ...profileForm, avatarUrl: e.target.value })} />
               </Field>
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-sm text-sage hover:border-pine hover:text-pine">
+                <span>Choose profile picture</span>
+                <input type="file" accept="image/*" className="sr-only" onChange={handleImageSelect("avatarUrl")} />
+              </label>
+              {profileForm.avatarUrl && (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <img src={profileForm.avatarUrl} alt="Profile preview" className="h-12 w-12 rounded-full object-cover" />
+                  <p className="text-xs text-sage">This photo appears on your account profile.</p>
+                </div>
+              )}
               <div className="flex justify-end pt-2">
                 <Button onClick={handleSaveProfile} loading={savingProfile}>Save Profile</Button>
               </div>
@@ -359,6 +381,16 @@ export default function SettingsPage() {
                 <Field label="Company Description">
                   <Textarea value={profileForm.providerDescription} onChange={(e) => setProfileForm({ ...profileForm, providerDescription: e.target.value })} />
                 </Field>
+                <Field label="Company Profile Picture URL">
+                  <Input value={profileForm.providerLogoUrl} placeholder="https://..." onChange={(e) => setProfileForm({ ...profileForm, providerLogoUrl: e.target.value })} />
+                </Field>
+                <label className="flex cursor-pointer items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-sm text-sage hover:border-pine hover:text-pine">
+                  <span>Choose company profile picture</span>
+                  <input type="file" accept="image/*" className="sr-only" onChange={handleImageSelect("providerLogoUrl")} />
+                </label>
+                {profileForm.providerLogoUrl && (
+                  <img src={profileForm.providerLogoUrl} alt="Company profile preview" className="h-20 w-20 rounded-xl object-cover ring-1 ring-border" />
+                )}
                 <div className="flex justify-end pt-2">
                   <Button onClick={handleSaveProfile} loading={savingProfile}>Save Provider Info</Button>
                 </div>

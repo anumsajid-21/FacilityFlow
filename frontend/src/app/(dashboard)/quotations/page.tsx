@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Quote, Check, Plus, FileText, Send } from "lucide-react";
+import { Quote, Check, Plus, FileText, Send, Sparkles } from "lucide-react";
 import { quotationsApi, serviceRequestsApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 import { Card, PageHeader, EmptyState, Loading, StatusBadge, Modal, Field, Input, Textarea, Tabs } from "@/components/ui/kit";
@@ -8,6 +8,25 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
 import { money, dateShort, humanize } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/kit";
+
+function recommendationScore(quote: any, quotes: any[]) {
+  const prices = quotes.map((q) => Number(q.price)).filter((price) => price > 0);
+  const lowestPrice = prices.length ? Math.min(...prices) : Number(quote.price);
+  const priceScore = Number(quote.price) > 0 ? lowestPrice / Number(quote.price) : 0;
+  const toDays = (value: any) => {
+    const match = String(value || "").toLowerCase().match(/(\d+(?:\.\d+)?)\s*(hour|day|week|month)/);
+    return match ? Number(match[1]) * ({ hour: 1 / 24, day: 1, week: 7, month: 30 } as any)[match[2]] : 14;
+  };
+  const durationDays = toDays(quote.duration);
+  const fastest = Math.min(...quotes.map((q) => toDays(q.duration)));
+  const speedScore = fastest / Math.max(durationDays, fastest);
+  const detailScore = [quote.sla, quote.warranty, quote.terms, quote.notes].filter(Boolean).length / 4;
+  return priceScore * 0.55 + speedScore * 0.25 + detailScore * 0.2;
+}
+
+function recommendedQuote(quotes: any[]) {
+  return quotes.filter((q) => ["SUBMITTED", "SHORTLISTED", "UNDER_REVIEW"].includes(q.status)).sort((a, b) => recommendationScore(b, quotes) - recommendationScore(a, quotes))[0];
+}
 
 export default function QuotationsPage() {
   const { user } = useAuthStore();
@@ -140,7 +159,6 @@ export default function QuotationsPage() {
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {openRequests.map((req) => {
-                // check if provider already quoted on this
                 const alreadyQuoted = (quotations ?? []).some((q) => q.serviceRequestId === req.id);
                 return (
                   <Card key={req.id}>
@@ -159,13 +177,7 @@ export default function QuotationsPage() {
                         {req.priority && <span>Priority: <span className="font-medium text-charcoal">{humanize(req.priority)}</span></span>}
                       </div>
                       <div className="pt-1">
-                        {alreadyQuoted ? (
-                          <p className="text-sm font-medium text-pine">✓ Already quoted</p>
-                        ) : (
-                          <Button className="w-full" onClick={() => openQuoteModal(req)}>
-                            <Plus className="h-4 w-4" /> Submit Quotation
-                          </Button>
-                        )}
+                        {alreadyQuoted ? <p className="text-sm font-medium text-pine">✓ Already quoted</p> : <Button className="w-full" onClick={() => openQuoteModal(req)}><Plus className="h-4 w-4" /> Submit Quotation</Button>}
                       </div>
                     </div>
                   </Card>
@@ -215,34 +227,55 @@ export default function QuotationsPage() {
           {!quotations ? <Loading /> : all.length === 0 ? (
             <Card><EmptyState icon={<Quote className="h-6 w-6" />} title="No quotations" description="Provider proposals will appear here for comparison once you submit service requests." /></Card>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-              {all.flatMap(([, list]) => list).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((q) => {
-                const accepted = q.status === "ACCEPTED";
+            <div className="space-y-8">
+              {all.map(([requestId, list]) => {
+                const recommended = recommendedQuote(list);
+                const request = list[0].serviceRequest;
                 return (
-                  <Card key={q.id} className={`flex flex-col ${accepted ? "border-pine ring-1 ring-pine/30" : ""}`}>
-                    <div className="flex items-start justify-between border-b border-border px-5 py-4">
-                      <div className="min-w-0">
-                        <h3 className="truncate font-semibold text-charcoal">{q.provider?.name || "Provider"}</h3>
-                        <p className="truncate text-xs text-sage">{q.serviceRequest?.title || "Service request"}</p>
+                  <section key={requestId} className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-border pb-2">
+                      <div>
+                        <h2 className="font-semibold text-charcoal">{request?.category?.name || request?.title || "Service task"}</h2>
+                        {request?.category?.name && <p className="text-xs text-sage">{request.title}</p>}
                       </div>
-                      <StatusBadge status={q.status} />
+                      <span className="text-xs font-medium text-sage">{list.length} quotation{list.length === 1 ? "" : "s"}</span>
                     </div>
-                    <div className="flex flex-1 flex-col p-5">
-                      <p className="text-2xl font-bold text-charcoal">{money(q.price)}</p>
-                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-sage">
-                        {q.duration && <span>Duration: <span className="font-medium text-charcoal">{q.duration}</span></span>}
-                        {q.numberOfWorkers && <span>Workers: <span className="font-medium text-charcoal">{q.numberOfWorkers}</span></span>}
-                        {q.sla && <span>SLA: <span className="font-medium text-charcoal">{q.sla}</span></span>}
-                        {q.expiryDate && <span>Expires: <span className="font-medium text-charcoal">{dateShort(q.expiryDate)}</span></span>}
-                      </div>
-                      {q.terms && <p className="mt-3 line-clamp-2 text-xs text-sage">{q.terms}</p>}
-                      <div className="mt-auto pt-4">
-                        <Button className="w-full" disabled={accepted || q.status === "REJECTED"} loading={busy === q.id} onClick={() => accept(q.id)}>
-                          {accepted ? <><Check className="h-4 w-4" /> Selected</> : "Accept quotation"}
-                        </Button>
-                      </div>
+                    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                      {list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((q) => {
+                        const accepted = q.status === "ACCEPTED";
+                        const recommendedForTask = recommended?.id === q.id;
+                        return (
+                          <Card key={q.id} className={`flex flex-col ${accepted || recommendedForTask ? "border-pine ring-1 ring-pine/30" : ""}`}>
+                            <div className="flex items-start justify-between border-b border-border px-5 py-4">
+                              <div className="min-w-0">
+                                <h3 className="truncate font-semibold text-charcoal">{q.provider?.name || "Provider"}</h3>
+                                <p className="truncate text-xs text-sage">{q.serviceRequest?.title || "Service request"}</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <StatusBadge status={q.status} />
+                                {recommendedForTask && <span className="flex items-center gap-1 text-[11px] font-bold text-pine"><Sparkles className="h-3 w-3" /> Recommended</span>}
+                              </div>
+                            </div>
+                            <div className="flex flex-1 flex-col p-5">
+                              <p className="text-2xl font-bold text-charcoal">{money(q.price)}</p>
+                              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-sage">
+                                {q.duration && <span>Duration: <span className="font-medium text-charcoal">{q.duration}</span></span>}
+                                {q.numberOfWorkers && <span>Workers: <span className="font-medium text-charcoal">{q.numberOfWorkers}</span></span>}
+                                {q.sla && <span>SLA: <span className="font-medium text-charcoal">{q.sla}</span></span>}
+                                {q.expiryDate && <span>Expires: <span className="font-medium text-charcoal">{dateShort(q.expiryDate)}</span></span>}
+                              </div>
+                              {q.terms && <p className="mt-3 line-clamp-2 text-xs text-sage">{q.terms}</p>}
+                              <div className="mt-auto pt-4">
+                                <Button className="w-full" disabled={accepted || q.status === "REJECTED"} loading={busy === q.id} onClick={() => accept(q.id)}>
+                                  {accepted ? <><Check className="h-4 w-4" /> Selected</> : "Accept quotation"}
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
                     </div>
-                  </Card>
+                  </section>
                 );
               })}
             </div>

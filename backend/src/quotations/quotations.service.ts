@@ -33,7 +33,7 @@ export class QuotationsService {
         skip: (q.page - 1) * q.limit,
         take: q.limit,
         orderBy: { createdAt: "desc" },
-        include: { provider: true, serviceRequest: { select: { id: true, title: true, status: true, buildingId: true, budget: true } } },
+        include: { provider: true, serviceRequest: { select: { id: true, title: true, status: true, buildingId: true, budget: true, category: { select: { name: true } } } } },
       }),
     ]);
     return buildPage(items, total, q.page, q.limit);

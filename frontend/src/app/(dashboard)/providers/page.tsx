@@ -103,7 +103,11 @@ export default function ProvidersPage() {
           {providers.map((p) => (
             <Card key={p.id} className="flex flex-col p-5 transition-all hover:border-brass hover:shadow-raised">
               <div className="flex items-start justify-between">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-pine/10 text-lg font-bold text-pine">{p.name?.slice(0, 1).toUpperCase()}</div>
+                {p.logoUrl ? (
+                  <img src={p.logoUrl} alt={`${p.name} profile`} className="h-12 w-12 rounded-xl object-cover ring-1 ring-border" />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-pine/10 text-lg font-bold text-pine">{p.name?.slice(0, 1).toUpperCase()}</div>
+                )}
                 {p.verificationStatus === "VERIFIED" && <span className="flex items-center gap-1 rounded-full bg-pine/10 px-2 py-0.5 text-xs font-medium text-pine"><BadgeCheck className="h-3.5 w-3.5" /> Verified</span>}
                 {p.verificationStatus !== "VERIFIED" && <StatusBadge status={p.verificationStatus} />}
               </div>
@@ -128,9 +132,13 @@ export default function ProvidersPage() {
         {selected && (
           <div className="space-y-6">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <StatusBadge status={selected.verificationStatus} />
-                {selected.workforceCapacity && <span className="ml-3 text-xs text-sage">{selected.workforceCapacity} worker capacity</span>}
+              <div className="flex items-center gap-3">
+                {selected.logoUrl ? <img src={selected.logoUrl} alt={`${selected.name} profile`} className="h-14 w-14 rounded-xl object-cover ring-1 ring-border" /> : null}
+                <div>
+                  <p className="font-semibold text-charcoal">{selected.name}</p>
+                  <StatusBadge status={selected.verificationStatus} />
+                  {selected.workforceCapacity && <span className="ml-3 text-xs text-sage">{selected.workforceCapacity} worker capacity</span>}
+                </div>
               </div>
               {user?.role === "PROVIDER" && (
                 <Button size="sm" onClick={openUploadModal} className="gap-1.5 bg-pine text-white text-xs">
