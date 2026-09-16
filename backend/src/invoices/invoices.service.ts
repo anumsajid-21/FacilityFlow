@@ -94,13 +94,13 @@ export class InvoicesService {
   async addPayment(user: AuthUser, id: string, dto: any) {
     const inv = await this.load(user, id);
     if (user.role === "HIRING_ORG" && user.hiringOrgId !== inv.organizationId) throw new ForbiddenException("Not your invoice");
-    const [total, totalPaid] = await Promise.all([
-      Number(inv.total),
-      this.prisma.payment.aggregate({ where: { invoiceId: inv.id }, _sum: { amount: true } }).then((a) => Number(a._sum.amount ?? 0)),
-    ]);
-    if (Math.round(Number(dto.amount) * 100) > Math.round((total - totalPaid) * 100)) throw new BadRequestException("Payment exceeds outstanding balance");
     let finalStatus = inv.status as string;
     const payment = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM "Invoice" WHERE id = ${inv.id} FOR UPDATE`);
+      const total = Number(inv.total);
+      const aggregate = await tx.payment.aggregate({ where: { invoiceId: inv.id, status: "COMPLETED" }, _sum: { amount: true } });
+      const totalPaid = Number(aggregate._sum.amount ?? 0);
+      if (Math.round(Number(dto.amount) * 100) > Math.round((total - totalPaid) * 100)) throw new BadRequestException("Payment exceeds outstanding balance");
       const p = await tx.payment.create({
         data: { invoiceId: inv.id, amount: dto.amount, date: dto.date ? new Date(dto.date) : new Date(), paymentMethod: dto.paymentMethod, status: "COMPLETED", recordedById: user.userId },
       });

@@ -245,7 +245,7 @@ export default function SettingsPage() {
   const openUploadModal = async () => {
     try {
       const jRes = await jobsApi.list({ limit: 100 });
-      const inProg = (jRes.data || []).filter((j: any) => j.status === "IN_PROGRESS" || j.status === "REWORK" || j.status === "SCHEDULED" || j.status === "COMPLETED");
+      const inProg = (jRes.data || []).filter((j: any) => j.status === "IN_PROGRESS" || j.status === "REWORK");
       setAvailableJobs(inProg);
       if (inProg.length > 0) setSelectedJobId(inProg[0].id);
       setOpenUpload(true);

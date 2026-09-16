@@ -28,7 +28,7 @@ async function req(method, path, { token, body } = {}) {
   const org = await req("POST", "/auth/login", { body: { email: "hiring@facilityflow.app", password: "Hire@12345" } });
   check("org login", (org.status === 200 || org.status === 201) && U(org.json).access_token, JSON.stringify(org.json).slice(0, 100));
   const orgToken = U(org.json).access_token;
-  const prov = await req("POST", "/auth/login", { body: { email: "provider2@facilityflow.app", password: "Provide@12345" } });
+  const prov = await req("POST", "/auth/login", { body: { email: "primehvac@facilityflow.app", password: "Provide@12345" } });
   check("provider login", (prov.status === 200 || prov.status === 201) && U(prov.json).access_token, JSON.stringify(prov.json).slice(0, 100));
   const provToken = U(prov.json).access_token;
 
@@ -78,7 +78,7 @@ async function req(method, path, { token, body } = {}) {
 
   // 9. Org sees quotation for request with provider info
   r = await req("GET", `/quotations/request/${srId}`, { token: orgToken });
-  check("org sees quotations w/ provider name", Array.isArray(U(r.json)) && U(r.json).length === 1 && U(r.json)[0].provider?.name === "Prime HVAC Services", JSON.stringify(U(r.json)).slice(0, 150));
+  check("org sees quotations w/ provider name", Array.isArray(U(r.json)) && U(r.json).length === 1 && U(r.json)[0].provider?.name === "Prime HVAC", JSON.stringify(U(r.json)).slice(0, 150));
 
   // 10. Accept -> contract auto-created
   r = await req("POST", `/quotations/${quoteId}/accept`, { token: orgToken });

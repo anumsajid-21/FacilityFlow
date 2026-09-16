@@ -53,10 +53,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error = 'Payload Too Large';
       }
       // Log detailed error server-side only — never send it to the client.
-      this.logger.error(
-        `${request.method} ${request.url} failed: ${e.name} ${(exception as Error).message}`,
-        (exception as Error).stack,
-      );
+      this.logger.error(JSON.stringify({ type: 'request_error', method: request.method, path: request.url, name: e.name, message: (exception as Error).message, timestamp: new Date().toISOString() }), (exception as Error).stack);
     }
 
     // 401 for unauthenticated requests

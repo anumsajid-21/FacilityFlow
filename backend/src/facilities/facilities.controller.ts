@@ -57,10 +57,10 @@ export class FacilitiesController {
   async listBuildings(@CurrentUser() user: AuthUser, @Query() q: PaginationDto) {
     const take = q.limit;
     const skip = (q.page - 1) * take;
-    const where = { organizationId: user.hiringOrgId!, isArchived: false };
+    const where = { ...(user.role === 'ADMIN' ? {} : { organizationId: user.hiringOrgId! }), isArchived: false };
     const [total, buildings] = await Promise.all([
       this.prisma.building.count({ where }),
-      this.prisma.building.findMany({ where, skip, take, orderBy: { name: 'asc' } }),
+      this.prisma.building.findMany({ where, skip, take, orderBy: { name: 'asc' }, include: { floors: { where: { isArchived: false }, include: { areas: { where: { isArchived: false } } } } } }),
     ]);
     return buildPage(buildings, total, q.page, take);
   }

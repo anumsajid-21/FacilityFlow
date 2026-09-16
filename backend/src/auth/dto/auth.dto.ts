@@ -36,3 +36,22 @@ export class LoginDto {
   @IsNotEmpty()
   password: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+
+  @IsString()
+  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @Matches(/[A-Z]/, { message: STRONG_PASSWORD_MESSAGE })
+  @Matches(/[a-z]/, { message: STRONG_PASSWORD_MESSAGE })
+  @Matches(/[0-9]/, { message: STRONG_PASSWORD_MESSAGE })
+  @Matches(/[^A-Za-z0-9]/, { message: STRONG_PASSWORD_MESSAGE })
+  password: string;
+}

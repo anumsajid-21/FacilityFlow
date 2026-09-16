@@ -27,7 +27,12 @@ export class ProofOfWorkService {
   async add(user: AuthUser, jobId: string, dto: any, beforePhotoIds: string[], afterPhotoIds: string[]) {
     const { job, isProvider, isWorker } = await this.loadJob(user, jobId);
     if (!isProvider && !isWorker) throw new ForbiddenException("Only the assigned provider or worker can add proof of work");
-    if (job.status !== "IN_PROGRESS") throw new BadRequestException("Job must be in progress to add proof");
+    if (job.status !== "IN_PROGRESS" && job.status !== "REWORK") throw new BadRequestException("Job must be in progress to add proof");
+    const photoIds = [...beforePhotoIds, ...afterPhotoIds];
+    if (photoIds.length) {
+      const photos = await this.prisma.file.findMany({ where: { id: { in: photoIds }, kind: "JOB_PHOTO", uploadedById: user.userId }, select: { id: true } });
+      if (photos.length !== new Set(photoIds).size) throw new ForbiddenException("Each photo must be uploaded by you for this job");
+    }
     const existing = await this.prisma.proofOfWork.findFirst({ where: { jobId } });
     const data: any = {
       jobId,

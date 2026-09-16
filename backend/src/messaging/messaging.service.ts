@@ -35,11 +35,11 @@ export class MessagingService {
         provider: { select: { id: true, name: true, verificationStatus: true } },
         contract: { select: { id: true, title: true, serviceName: true } },
         serviceRequest: { select: { id: true, title: true } },
-        messages: { orderBy: { createdAt: "desc" }, take: 1, include: { sender: { select: { id: true, name: true, role: true } } } },
+        messages: user.role === "ADMIN" ? false : { orderBy: { createdAt: "desc" }, take: 1, include: { sender: { select: { id: true, name: true, role: true, avatarUrl: true } } } },
         _count: { select: { messages: true } },
       },
     });
-    const unread = await this.prisma.message.count({
+    const unread = user.role === "ADMIN" ? 0 : await this.prisma.message.count({
       where: { thread: where, senderId: { not: user.userId }, readAt: null },
     });
     return { threads, unreadCount: unread };
@@ -58,7 +58,7 @@ export class MessagingService {
         provider: { select: { id: true, name: true, verificationStatus: true } },
         contract: true,
         serviceRequest: true,
-        messages: { orderBy: { createdAt: "asc" }, include: { sender: { select: { id: true, name: true, role: true } } } },
+        messages: user.role === "ADMIN" ? false : { orderBy: { createdAt: "asc" }, include: { sender: { select: { id: true, name: true, role: true, avatarUrl: true } } } },
       },
     });
   }

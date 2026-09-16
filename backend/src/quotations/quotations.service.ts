@@ -149,12 +149,16 @@ export class QuotationsService {
     if (q.status !== "SUBMITTED" && q.status !== "SHORTLISTED") throw new BadRequestException(`Cannot accept quotation in ${q.status} status`);
 
     await this.prisma.$transaction(async (tx) => {
+      const lockedRequest = await tx.serviceRequest.updateMany({
+        where: { id: q.serviceRequest.id, status: { not: "PROVIDER_SELECTED" } },
+        data: { status: "PROVIDER_SELECTED" },
+      });
+      if (lockedRequest.count !== 1) throw new BadRequestException("A provider has already been selected for this request");
       await tx.quotation.update({ where: { id }, data: { status: "ACCEPTED", shortlistedAt: new Date() } });
       await tx.quotation.updateMany({
-        where: { serviceRequestId: q.serviceRequest.id, id: { not: id }, status: { in: ["SUBMITTED", "SHORTLISTED", "UNDER_REVIEW"] } },
+        where: { serviceRequestId: q.serviceRequest.id, id: { not: id }, status: { in: ["SUBMITTED", "SHORTLISTED", "UNDER_REVIEW", "ACCEPTED"] } },
         data: { status: "REJECTED" },
       });
-      await tx.serviceRequest.update({ where: { id: q.serviceRequest.id }, data: { status: "PROVIDER_SELECTED" } });
 
       // Auto-create the contract for the accepted quotation (one per quotation).
       const existingContract = await tx.contract.findUnique({ where: { quotationId: id } });

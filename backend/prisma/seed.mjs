@@ -75,16 +75,16 @@ const DEMO_USERS = [
   {
     email: 'hiring@facilityflow.app',
     password: 'Hire@12345',
-    name: 'Demo Facility Manager',
+    name: 'QX Industry Manager',
     role: 'HIRING_ORG',
-    organization: 'Demo Facilities Co',
+    organization: 'QX Industry',
   },
   {
-    email: 'provider@facilityflow.app',
+    email: 'primehvac@facilityflow.app',
     password: 'Provide@12345',
     name: 'Demo Provider Manager',
     role: 'PROVIDER',
-    provider: 'Demo Maintenance Pros',
+    provider: 'Prime HVAC',
   },
   {
     email: 'admin@facilityflow.app',
@@ -176,11 +176,8 @@ async function seedDemoUsers() {
 }
 
 const DEMO_PROVIDERS = [
-  { email: 'provider@facilityflow.app', password: 'Provide@12345', name: 'Demo Provider Manager', company: 'Demo Maintenance Pros' },
-  { email: 'provider2@facilityflow.app', password: 'Provide@12345', name: 'Prime HVAC Manager', company: 'Prime HVAC Services' },
-  { email: 'provider3@facilityflow.app', password: 'Provide@12345', name: 'SparkleClean Manager', company: 'SparkleClean Facility Care' },
-  { email: 'provider4@facilityflow.app', password: 'Provide@12345', name: 'Metro Electrical Manager', company: 'Metro Electrical Group', verificationStatus: 'DOCUMENTS_SUBMITTED' },
-  { email: 'provider5@facilityflow.app', password: 'Provide@12345', name: 'GreenLeaf Landscapes Manager', company: 'GreenLeaf Landscapes', verificationStatus: 'UNDER_REVIEW' },
+  { email: 'primehvac@facilityflow.app', password: 'Provide@12345', name: 'Prime HVAC Manager', company: 'Prime HVAC' },
+  { email: 'sparkleclean@facilityflow.app', password: 'Provide@12345', name: 'SparkleClean Manager', company: 'SparkleClean' },
 ];
 
 async function seedDemoProviders(categories) {
@@ -359,7 +356,7 @@ async function seedBusinessData(org, providers, categories) {
       quotationId: acceptedQuote.id,
       buildingId: srCleaning.buildingId,
       serviceName: 'Commercial Cleaning',
-      title: 'Commercial Cleaning - SparkleClean Facility Care',
+      title: 'Commercial Cleaning - SparkleClean',
       price: 750,
       startDate: start,
       endDate: end,
@@ -555,12 +552,12 @@ async function seedSecondOrganization(categories) {
   if (buildingsExist) {
     const adminB = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'Metro Administrative Center' } });
     return { org, user, categories: { electricalId, cleaningId, plumbingId }, hospital: buildingsExist, adminB,
-      metroElectrical: await prisma.provider.findFirst({ where: { name: 'Metro Electrical Group' } }),
-      demoProvider: await prisma.provider.findFirst({ where: { name: 'Demo Maintenance Pros' } }) };
+      metroElectrical: await prisma.provider.findFirst({ where: { name: 'Prime HVAC' } }),
+      demoProvider: await prisma.provider.findFirst({ where: { name: 'SparkleClean' } }) };
   }
 
-  const metroElectrical = await prisma.provider.findFirst({ where: { name: 'Metro Electrical Group' } });
-  const demoProvider = await prisma.provider.findFirst({ where: { name: 'Demo Maintenance Pros' } });
+  const metroElectrical = await prisma.provider.findFirst({ where: { name: 'Prime HVAC' } });
+  const demoProvider = await prisma.provider.findFirst({ where: { name: 'SparkleClean' } });
 
   const hospital = await prisma.building.create({ data: { organizationId: org.id, name: 'Metro General Hospital', address: '1200 Wellness Ave', city: 'Dallas', buildingType: 'Hospital', numberOfFloors: 4 } });
   const adminB = await prisma.building.create({ data: { organizationId: org.id, name: 'Metro Administrative Center', address: '45 Care Blvd', city: 'Dallas', buildingType: 'Office', numberOfFloors: 2 } });
@@ -733,7 +730,7 @@ async function main() {
   const providers = await seedDemoProviders(categories);
   const workers = await seedWorkers(providers);
   // Attach demo business data to the demo hiring organization
-  const org = await prisma.organization.findFirst({ where: { name: 'Demo Facilities Co' } });
+  const org = await prisma.organization.findFirst({ where: { name: 'QX Industry' } });
   if (org) {
     await seedBusinessData(org, providers, categories);
     await seedOpenDemoRequests(org, categories);

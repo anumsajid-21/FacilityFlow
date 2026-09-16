@@ -1,4 +1,5 @@
 import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { createHash, randomBytes } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -134,6 +135,31 @@ export class AuthService {
         providerId: user.providerId,
       },
     };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() }, select: { id: true, email: true } });
+    if (user) {
+      const rawToken = randomBytes(32).toString('hex');
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+      await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+      await this.prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 60 * 60 * 1000) } });
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      await this.notifications.notify({ userId: user.id, type: 'PASSWORD_RESET', title: 'Reset your password', message: `Use this link within one hour: ${baseUrl}/reset-password?token=${rawToken}` });
+    }
+    return { message: 'If an account exists for that email, a reset link has been sent.' };
+  }
+
+  async resetPassword(rawToken: string, password: string) {
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const record = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!record || record.usedAt || record.expiresAt < new Date()) throw new UnauthorizedException('This reset link is invalid or expired');
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: record.userId }, data: { password: hash } }),
+      this.prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+    ]);
+    return { message: 'Password reset successfully.' };
   }
 
   async me(userId: string): Promise<AuthPayload['user']> {

@@ -40,7 +40,7 @@ async function ensureSlaPolicy(providerId, name, opts = {}) {
 }
 
 async function run() {
-  const org = await findOne('organization', { name: 'Demo Facilities Co' });
+  const org = await findOne('organization', { name: 'QX Industry' });
   if (!org) {
     console.log('Demo org not found — run `npm run db:seed` first.');
     return;
@@ -49,9 +49,8 @@ async function run() {
 
   const providers = [];
   const providerEmails = [
-    'provider@facilityflow.app',
-    'provider2@facilityflow.app',
-    'provider3@facilityflow.app',
+    'primehvac@facilityflow.app',
+    'sparkleclean@facilityflow.app',
   ];
   for (const email of providerEmails) {
     const u = await prisma.user.findUnique({ where: { email }, include: { provider: true } });

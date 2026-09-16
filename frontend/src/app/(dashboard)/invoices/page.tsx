@@ -31,6 +31,7 @@ export default function InvoicesPage() {
   };
 
   const recordPayment = async () => {
+    if (busy === "pay" || !detail) return;
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.error("Required", "Enter a payment amount.");
     setBusy("pay");
     try {

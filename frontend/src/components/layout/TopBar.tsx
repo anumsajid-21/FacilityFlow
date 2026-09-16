@@ -30,7 +30,8 @@ const ROUTE_TITLES: Record<string, string> = {
 
 export function TopBar() {
   const pathname = usePathname();
-  const role = useAuthStore((s) => s.user?.role);
+  const user = useAuthStore((s) => s.user);
+  const role = user?.role;
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -110,6 +111,7 @@ export function TopBar() {
 
       {/* Actions: Message -> Notification -> Settings (Right to Left: Settings -> Notification -> Message) */}
       <div className="flex items-center gap-1">
+        {user?.avatarUrl && <img src={user.avatarUrl} alt="" className="mr-1 h-7 w-7 rounded-full object-cover" />}
         {role !== "WORKER" && (
           <Link href="/messages" aria-label="Messages" className="relative rounded-full p-2 text-ivory/80 transition-colors hover:bg-ivory/10 hover:text-ivory">
             <MessageCircle className="h-5 w-5" />

@@ -90,9 +90,7 @@ export function Sidebar() {
       <div className={cn("border-t border-ivory/10 p-3", isCollapsed && "px-2")}>
         {!isCollapsed && (
           <div className="mb-2 flex items-center gap-2.5 px-1">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brass/20 text-xs font-semibold text-brass">
-              {(user?.name ?? "?").slice(0, 1).toUpperCase()}
-            </div>
+            {user?.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" /> : <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brass/20 text-xs font-semibold text-brass">{(user?.name ?? "?").slice(0, 1).toUpperCase()}</div>}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ivory">{user?.name ?? "Signed in"}</p>
               <p className="truncate text-[11px] text-sand/60">
@@ -173,4 +171,4 @@ export function Sidebar() {
       </aside>
     </>
   );
-}
+}

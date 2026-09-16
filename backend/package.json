@@ -27,6 +27,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:seed:demo": "node prisma/seed-demo.mjs",
+    "db:cleanup:part2": "node prisma/cleanup-part2.mjs",
+    "db:backup:check": "powershell -ExecutionPolicy Bypass -File scripts/backup-restore-check.ps1",
     "db:reset": "node scripts/dev-db.mjs reset"
   },
   "prisma": {

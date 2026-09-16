@@ -98,7 +98,7 @@ export class ProvidersService {
     if (!provider) throw new NotFoundException("Provider not found");
     // verify the file belongs to the user's provider
     const file = await this.prisma.file.findUnique({ where: { id: dto.fileId } });
-    if (!file) throw new BadRequestException("File not found");
+    if (!file || file.uploadedById !== user.userId || file.kind !== "PROVIDER_DOCUMENT") throw new BadRequestException("Uploaded verification file is invalid");
     const doc = await this.prisma.verificationDocument.create({
       data: { providerId: id, documentType: dto.documentType, fileId: dto.fileId, status: "PENDING", expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null, resubmittedAt: new Date() },
     });

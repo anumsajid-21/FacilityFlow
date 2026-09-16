@@ -59,7 +59,8 @@ export default function QuotationsPage() {
   }, [isProvider]);
 
   // Group by service request for org side-by-side comparison
-  const groups = (quotations ?? []).reduce<Record<string, any[]>>((acc, q) => {
+  const uniqueQuotations = Array.from(new Map((quotations ?? []).map((q) => [q.id, q])).values());
+  const groups = uniqueQuotations.reduce<Record<string, any[]>>((acc, q) => {
     const id = q.serviceRequestId || "open";
     (acc[id] = acc[id] || []).push(q);
     return acc;
@@ -90,6 +91,7 @@ export default function QuotationsPage() {
   };
 
   const submitQuotation = async () => {
+    if (submittingQuote) return;
     if (!quoteForm.price || Number(quoteForm.price) <= 0)
       return toast.error("Required", "Please enter a valid price.");
     setSubmittingQuote(true);

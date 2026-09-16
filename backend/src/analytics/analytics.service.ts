@@ -4,6 +4,7 @@ import { AuthUser } from "../common/decorators/user.decorator";
 
 @Injectable()
 export class AnalyticsService {
+  private readonly cache = new Map<string, { expiresAt: number; value: any }>();
   constructor(private prisma: PrismaService) {}
 
   async hiringDashboard(user: AuthUser) {
@@ -64,6 +65,9 @@ export class AnalyticsService {
   }
 
   async spend(user: AuthUser, from?: string, to?: string) {
+    const cacheKey = `${user.role}:${user.hiringOrgId ?? ""}:${user.providerId ?? ""}:${from ?? ""}:${to ?? ""}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
     const where: any = { status: { in: ["ISSUED", "PENDING", "PAID", "OVERDUE"] } };
     if (user.role === "HIRING_ORG") where.organizationId = user.hiringOrgId;
     const start = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 365));
@@ -89,7 +93,7 @@ export class AnalyticsService {
       byCategory.set(category, (byCategory.get(category) ?? 0) + amount);
     }
     const scorecards = await this.providerScorecards(user);
-    return {
+    const result = {
       from: start.toISOString(),
       to: end.toISOString(),
       monthly: [...byMonth.entries()].map(([period, amount]) => ({ period, amount: Number(amount.toFixed(2)) })),
@@ -97,6 +101,8 @@ export class AnalyticsService {
       byCategory: [...byCategory.entries()].map(([category, amount]) => ({ category, amount: Number(amount.toFixed(2)) })),
       scorecards,
     };
+    this.cache.set(cacheKey, { expiresAt: Date.now() + 30_000, value: result });
+    return result;
   }
 
   async providerScorecards(user: AuthUser) {
@@ -115,7 +121,7 @@ export class AnalyticsService {
 
   async exportCsv(user: AuthUser, from?: string, to?: string) {
     const data = await this.spend(user, from, to);
-    const rows = [["period", "amount"], ...data.monthly.map((row) => [row.period, String(row.amount)])];
+    const rows = [["period", "amount"], ...data.monthly.map((row: { period: string; amount: number }) => [row.period, String(row.amount)])];
     return rows.map((row) => row.map(csvEscape).join(",")).join("\r\n") + "\r\n";
   }
 }
