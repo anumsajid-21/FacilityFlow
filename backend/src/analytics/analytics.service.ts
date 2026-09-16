@@ -41,7 +41,7 @@ export class AnalyticsService {
     if (!user.providerId) return {};
     const pId = user.providerId;
     const [requestsReceived, quotationsSubmitted, activeContracts, upcomingJobs, completedJobs, invoices] = await Promise.all([
-      this.prisma.serviceRequest.count({ where: { category: { providers: { some: { providerId: pId } } } } }),
+      this.prisma.serviceRequest.count({ where: { status: "OPEN", isArchived: false, category: { providers: { some: { providerId: pId } } } } }),
       this.prisma.quotation.count({ where: { providerId: pId } }),
       this.prisma.contract.count({ where: { providerId: pId, status: "ACTIVE" } }),
       this.prisma.job.count({ where: { contract: { providerId: pId }, date: { gte: new Date() }, status: { in: ["SCHEDULED", "ASSIGNED", "IN_PROGRESS"] } } }),

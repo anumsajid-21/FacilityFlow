@@ -56,7 +56,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-sand">
+    <div className="flex min-h-screen overflow-y-auto bg-sand">
       <div className="hidden w-1/2 flex-col justify-between bg-pine p-12 lg:flex">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brass text-lg font-bold text-pine-darker">FF</div>
@@ -68,8 +68,8 @@ export default function RegisterPage() {
         </div>
         <p className="text-xs text-sand/50">© {new Date().getFullYear()} FacilityFlow</p>
       </div>
-      <div className="flex flex-1 flex-col items-center justify-center p-6">
-        <div className="w-full max-w-sm">
+      <div className="flex flex-1 flex-col items-center justify-center p-6 py-10">
+        <div className="mx-auto w-full max-w-sm">
           <div className="mb-8 lg:hidden">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-pine text-sm font-bold text-brass">FF</div>
@@ -79,7 +79,7 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold text-charcoal">Create your account</h1>
           <p className="mt-1 text-sm text-sage">Start managing facility services in minutes.</p>
           {error && <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="mt-6 space-y-4">
             <div>
               <label className="mb-2 block text-sm font-medium text-charcoal">I want to…</label>
               <div className="grid grid-cols-2 gap-2">
@@ -106,10 +106,10 @@ export default function RegisterPage() {
               <Input placeholder="Acme Corp" {...register("companyName")} />
             </Field>
             <Field label="Email" error={errors.email?.message}>
-              <Input placeholder="m@example.com" type="email" {...register("email")} />
+              <Input placeholder="m@example.com" type="email" autoComplete="off" {...register("email")} />
             </Field>
             <Field label="Password" error={errors.password?.message}>
-              <Input type="password" placeholder="Min. 8 characters" {...register("password")} />
+              <Input type="password" placeholder="Min. 8 characters" autoComplete="new-password" {...register("password")} />
               
               {/* Password Strength Indicator */}
               {(() => {

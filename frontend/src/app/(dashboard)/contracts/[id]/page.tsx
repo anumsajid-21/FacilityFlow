@@ -32,12 +32,20 @@ export default function ContractDetailPage() {
   }, [id]);
 
   const isHiring = user?.role === "HIRING_ORG" || user?.role === "ADMIN";
+  const jobDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`).toISOString();
 
   const createJob = async () => {
     if (!jobForm.title || !jobForm.date || !jobForm.startTime || !jobForm.endTime) return toast.error("Required", "Title, date, start time and end time are required.");
     setBusy(true);
     try {
-      await jobsApi.create({ contractId: id, buildingId: contract.buildingId, ...jobForm });
+      await jobsApi.create({
+        contractId: id,
+        buildingId: contract.buildingId,
+        ...jobForm,
+        date: jobDateTime(jobForm.date, jobForm.startTime),
+        startTime: jobDateTime(jobForm.date, jobForm.startTime),
+        endTime: jobDateTime(jobForm.date, jobForm.endTime),
+      });
       toast.success("Job created");
       setOpenCreateJob(false);
       setJobForm({ title: "", date: "", startTime: "", endTime: "", instructions: "" });

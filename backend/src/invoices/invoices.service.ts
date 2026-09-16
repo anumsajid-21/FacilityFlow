@@ -208,6 +208,7 @@ export class InvoicesService {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const PDFDocument = require("pdfkit");
     const doc = new PDFDocument({ margin: 50 });
+    const money = (value: unknown) => `PKR ${Number(value ?? 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${inv.invoiceNumber}.pdf"`);
@@ -235,24 +236,24 @@ export class InvoicesService {
     doc.fontSize(12).fillColor("#1F2937").text("Summary", 50, 220);
     doc.fontSize(10).fillColor("#4B5563");
     doc.text("Subtotal:", 50, 245);
-    doc.text(`$${Number(inv.amount).toFixed(2)}`, 450, 245, { align: "right" });
+    doc.text(money(inv.amount), 450, 245, { align: "right" });
 
     doc.text("Tax:", 50, 265);
-    doc.text(`$${Number(inv.tax ?? 0).toFixed(2)}`, 450, 265, { align: "right" });
+    doc.text(money(inv.tax ?? 0), 450, 265, { align: "right" });
 
     doc.text("Discount:", 50, 285);
-    doc.text(`-$${Number(inv.discount ?? 0).toFixed(2)}`, 450, 285, { align: "right" });
+    doc.text(`-${money(inv.discount ?? 0)}`, 450, 285, { align: "right" });
 
     doc.moveTo(50, 310).lineTo(550, 310).strokeColor("#1F2937").stroke();
 
     doc.fontSize(13).fillColor("#059669").text("Total:", 50, 325);
-    doc.fontSize(13).fillColor("#059669").text(`$${Number(inv.total).toFixed(2)}`, 450, 325, { align: "right" });
+    doc.fontSize(13).fillColor("#059669").text(money(inv.total), 450, 325, { align: "right" });
 
     doc.fontSize(10).fillColor("#6B7280").text("Total Paid:", 50, 355);
-    doc.text(`$${Number(inv.totalPaid ?? 0).toFixed(2)}`, 450, 355, { align: "right" });
+    doc.text(money(inv.totalPaid ?? 0), 450, 355, { align: "right" });
 
     doc.text("Remaining Balance:", 50, 375);
-    doc.text(`$${Number(inv.balance ?? 0).toFixed(2)}`, 450, 375, { align: "right" });
+    doc.text(money(inv.balance ?? 0), 450, 375, { align: "right" });
 
     doc.fontSize(9).fillColor("#9CA3AF").text("Thank you for choosing FacilityFlow.", 50, 440, { align: "center" });
 

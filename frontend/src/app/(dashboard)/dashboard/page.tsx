@@ -121,7 +121,7 @@ function ProviderCockpit({ data, name }: { data: any; name: string }) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{kpis.map((k) => <KPI key={k.label} {...k} />)}</div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card><CardHeader title="Quotations submitted" /><div className="p-5 text-4xl font-bold text-charcoal">{data.quotationsSubmitted}</div></Card>
-        <Card><CardHeader title="Requests available" /><div className="flex items-center justify-between p-5"><div className="text-4xl font-bold text-charcoal">{data.requestsReceived}</div><Link href="/service-requests"><Button variant="outline" size="sm">Browse <ArrowRight className="h-4 w-4" /></Button></Link></div></Card>
+        <Card><CardHeader title="Requests available" /><div className="flex items-center justify-between p-5"><div className="text-4xl font-bold text-charcoal">{data.requestsReceived}</div><Link href="/quotations"><Button variant="outline" size="sm">Browse <ArrowRight className="h-4 w-4" /></Button></Link></div></Card>
       </div>
     </div>
   );

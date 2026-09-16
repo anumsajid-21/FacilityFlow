@@ -132,8 +132,15 @@ async function seedChecklists(categories) {
 async function seedDemoUsers() {
   for (const u of DEMO_USERS) {
     const existing = await prisma.user.findUnique({ where: { email: u.email } });
-    if (existing) continue;
     const hashed = await bcrypt.hash(u.password, 12);
+
+    if (existing) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { password: hashed, name: u.name, role: u.role, isActive: true },
+      });
+      continue;
+    }
 
     let hiringOrgId = null;
     let providerId = null;
@@ -200,6 +207,11 @@ async function seedDemoProviders(categories) {
           role: 'PROVIDER',
           providerId: provider.id,
         },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: await bcrypt.hash(p.password, 12), name: p.name, role: 'PROVIDER', providerId: provider.id, isActive: true },
       });
     }
     for (const catName of ['HVAC/AC', 'Commercial Cleaning']) {
@@ -382,6 +394,51 @@ async function seedBusinessData(org, providers, categories) {
   console.log('Seed complete: demo buildings, requests, quotations, contract and jobs created.');
 }
 
+async function seedOpenDemoRequests(org, categories) {
+  const building = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'HQ Tower' } });
+  const floor = building ? await prisma.floor.findFirst({ where: { buildingId: building.id }, orderBy: { name: 'asc' } }) : null;
+  const area = floor ? await prisma.area.findFirst({ where: { floorId: floor.id } }) : null;
+  if (!building || !floor) return;
+
+  const requests = [
+    ['Open HVAC filter replacement', 'HVAC/AC', 'Replace filters and inspect airflow in the main office.'],
+    ['Open lobby cleaning request', 'Commercial Cleaning', 'Deep clean the lobby floors, glass and reception area.'],
+    ['Open rooftop HVAC inspection', 'HVAC/AC', 'Inspect rooftop units and document any required repairs.'],
+  ];
+  for (const [title, categoryName, description] of requests) {
+    const categoryId = categories.get(categoryName);
+    if (!categoryId) continue;
+    const existing = await prisma.serviceRequest.findFirst({ where: { organizationId: org.id, title } });
+    if (!existing) {
+      await prisma.serviceRequest.create({
+        data: { organizationId: org.id, categoryId, title, description, buildingId: building.id, floorId: floor.id, areaId: area?.id, priority: 'NORMAL', status: 'OPEN' },
+      });
+    }
+  }
+}
+
+async function seedReviewDemoJob(org) {
+  const contract = await prisma.contract.findFirst({ where: { organizationId: org.id, status: 'ACTIVE' }, include: { provider: true } });
+  if (!contract) return;
+  const existing = await prisma.job.findFirst({ where: { contractId: contract.id, title: 'Completed review test job' } });
+  if (existing) return;
+  const building = await prisma.building.findUnique({ where: { id: contract.buildingId } });
+  const floor = building ? await prisma.floor.findFirst({ where: { buildingId: building.id } }) : null;
+  const area = floor ? await prisma.area.findFirst({ where: { floorId: floor.id } }) : null;
+  const completedAt = new Date(Date.now() - 2 * 864e5);
+  const job = await prisma.job.create({
+    data: {
+      contractId: contract.id, buildingId: building.id, floorId: floor?.id, areaId: area?.id,
+      title: 'Completed review test job', location: `${building?.name ?? 'Demo facility'} - ${area?.name ?? 'Common area'}`,
+      date: completedAt, startTime: new Date(completedAt.getTime() - 2 * 3600000), endTime: completedAt,
+      serviceName: contract.serviceName, status: 'COMPLETED', startedAt: new Date(completedAt.getTime() - 2 * 3600000), completedAt,
+    },
+  });
+  await prisma.proofOfWork.create({ data: { jobId: job.id, providerNote: 'Demo service completed and inspected.', completionNote: 'Completed for review testing.', completedAt, workerName: 'Demo Service Team' } });
+  const orgUser = await prisma.user.findFirst({ where: { hiringOrgId: org.id } });
+  await prisma.approval.create({ data: { jobId: job.id, approvedByUserId: orgUser?.id, decision: 'APPROVED', notes: 'Seeded approval for review testing.' } });
+}
+
 const DEMO_WORKERS = [
   { email: 'worker1@facilityflow.app', password: 'Worker123!', name: 'Alex Rivera', skills: 'Commercial cleaning, floor care', certifications: 'OSHA 10', providerIndex: 2 },
   { email: 'worker2@facilityflow.app', password: 'Worker123!', name: 'Jordan Lee', skills: 'HVAC, preventive maintenance', certifications: 'EPA 608', providerIndex: 1 },
@@ -495,7 +552,12 @@ async function seedSecondOrganization(categories) {
     await prisma.organizationMember.create({ data: { organizationId: org.id, userId: user.id, role: 'ADMIN' } });
   }
   const buildingsExist = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'Metro General Hospital' } });
-  if (buildingsExist) return org;
+  if (buildingsExist) {
+    const adminB = await prisma.building.findFirst({ where: { organizationId: org.id, name: 'Metro Administrative Center' } });
+    return { org, user, categories: { electricalId, cleaningId, plumbingId }, hospital: buildingsExist, adminB,
+      metroElectrical: await prisma.provider.findFirst({ where: { name: 'Metro Electrical Group' } }),
+      demoProvider: await prisma.provider.findFirst({ where: { name: 'Demo Maintenance Pros' } }) };
+  }
 
   const metroElectrical = await prisma.provider.findFirst({ where: { name: 'Metro Electrical Group' } });
   const demoProvider = await prisma.provider.findFirst({ where: { name: 'Demo Maintenance Pros' } });
@@ -553,7 +615,10 @@ async function seedMetroPipeline(ctx) {
 
   const acceptedQuote = await prisma.quotation.findFirst({ where: { serviceRequest: { organizationId: org.id }, status: 'ACCEPTED' }, include: { serviceRequest: true } });
   if (acceptedQuote) {
-    await prisma.contract.create({ data: { organizationId: org.id, providerId: acceptedQuote.providerId, serviceRequestId: acceptedQuote.serviceRequestId, quotationId: acceptedQuote.id, buildingId: acceptedQuote.serviceRequest.buildingId, serviceName: 'Electrical', title: 'Clinic Electrical Works - Metro Health', price: 1750, startDate: new Date(Date.now() - 30 * 864e5), endDate: new Date(Date.now() + 335 * 864e5), sla: 'Resolution within 24 hours', status: 'ACTIVE' } });
+    const existingContract = await prisma.contract.findUnique({ where: { quotationId: acceptedQuote.id } });
+    if (!existingContract) {
+      await prisma.contract.create({ data: { organizationId: org.id, providerId: acceptedQuote.providerId, serviceRequestId: acceptedQuote.serviceRequestId, quotationId: acceptedQuote.id, buildingId: acceptedQuote.serviceRequest.buildingId, serviceName: 'Electrical', title: 'Clinic Electrical Works - Metro Health', price: 1750, startDate: new Date(Date.now() - 30 * 864e5), endDate: new Date(Date.now() + 335 * 864e5), sla: 'Resolution within 24 hours', status: 'ACTIVE' } });
+    }
   }
   const closedSR = createdSRs.find((c) => c.spec.status === 'CLOSED');
   if (closedSR && demoProvider) {
@@ -563,6 +628,10 @@ async function seedMetroPipeline(ctx) {
 
   const activeContract = await prisma.contract.findFirst({ where: { organizationId: org.id, status: 'ACTIVE' }, include: { jobs: true } });
   if (activeContract) {
+    await prisma.contract.update({
+      where: { id: activeContract.id },
+      data: { title: 'Electrical Maintenance Program - Metro Health', price: 17500 },
+    });
     const hospitalFloor = await prisma.floor.findFirst({ where: { buildingId: hospital.id } });
     const hospitalArea = await prisma.area.findFirst({ where: { floorId: hospitalFloor.id } });
     const jobSpecs = [
@@ -580,13 +649,19 @@ async function seedMetroPipeline(ctx) {
     const metroJobs = [];
     for (const spec of jobSpecs) {
       const date = new Date(Date.now() + spec.daysOffset * 864e5);
-      const job = await prisma.job.create({ data: { contractId: activeContract.id, buildingId: hospital.id, floorId: hospitalFloor.id, areaId: hospitalArea.id, title: spec.title, location: `Metro General Hospital - ${spec.title}`, date, startTime: date, endTime: new Date(date.getTime() + 4 * 3600000), serviceName: 'Electrical', status: spec.status } });
+      const job = await prisma.job.findFirst({ where: { contractId: activeContract.id, title: spec.title } }) || await prisma.job.create({ data: { contractId: activeContract.id, buildingId: hospital.id, floorId: hospitalFloor.id, areaId: hospitalArea.id, title: spec.title, location: `Metro General Hospital - ${spec.title}`, date, startTime: date, endTime: new Date(date.getTime() + 4 * 3600000), serviceName: 'Electrical', status: spec.status } });
       metroJobs.push({ job, spec });
       const slaPolicy = await prisma.slaPolicy.findFirst({ where: { providerId: activeContract.providerId } });
-      await prisma.jobSla.create({ data: { jobId: job.id, policyId: slaPolicy?.id, deadline: new Date(date.getTime() + (spec.slaBreached ? -12 : 48) * 3600000), breachedAt: spec.slaBreached ? new Date(date.getTime() + 60 * 3600000) : null } });
+      await prisma.jobSla.upsert({
+        where: { jobId: job.id },
+        update: { policyId: slaPolicy?.id, deadline: new Date(date.getTime() + (spec.slaBreached ? -12 : 48) * 3600000), breachedAt: spec.slaBreached ? new Date(date.getTime() + 60 * 3600000) : null },
+        create: { jobId: job.id, policyId: slaPolicy?.id, deadline: new Date(date.getTime() + (spec.slaBreached ? -12 : 48) * 3600000), breachedAt: spec.slaBreached ? new Date(date.getTime() + 60 * 3600000) : null },
+      });
 
       // Seed Proof of Work for completed, awaiting_approval, rework, and in_progress jobs
       if (['IN_PROGRESS', 'AWAITING_APPROVAL', 'COMPLETED', 'REWORK'].includes(spec.status)) {
+        const existingProof = await prisma.proofOfWork.findFirst({ where: { jobId: job.id } });
+        if (existingProof) continue;
         const slug = spec.title.toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beforeFile = await prisma.file.create({
           data: {
@@ -661,6 +736,8 @@ async function main() {
   const org = await prisma.organization.findFirst({ where: { name: 'Demo Facilities Co' } });
   if (org) {
     await seedBusinessData(org, providers, categories);
+    await seedOpenDemoRequests(org, categories);
+    await seedReviewDemoJob(org);
     await seedExtendedBusiness(org, providers, workers);
   }
   const metroCtx = await seedSecondOrganization(categories);

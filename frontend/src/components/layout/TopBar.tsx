@@ -92,16 +92,18 @@ export function TopBar() {
   const segments = pathname.split("/").filter(Boolean);
   const mainPath = `/${segments[0] || "dashboard"}`;
   const title = ROUTE_TITLES[pathname] || ROUTE_TITLES[mainPath] || "Overview";
+  const lastSegment = segments[segments.length - 1] || "";
+  const isInternalId = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(lastSegment);
 
   return (
     <header className="sticky top-2 z-30 mx-3 mb-3 hidden h-14 items-center justify-between rounded-xl border border-ivory/10 bg-pine px-4 text-ivory shadow-raised sm:mx-4 sm:px-5 lg:flex">
       {/* Title & Breadcrumb */}
       <div className="flex items-center gap-2 text-sm">
         <span className="font-semibold">{title}</span>
-        {segments.length > 1 && (
+        {segments.length > 1 && !isInternalId && (
           <>
             <ChevronRight className="h-4 w-4 text-ivory/50" />
-            <span className="capitalize text-ivory/70">{segments[segments.length - 1].replace(/-/g, " ")}</span>
+            <span className="capitalize text-ivory/70">{lastSegment.replace(/-/g, " ")}</span>
           </>
         )}
       </div>

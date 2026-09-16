@@ -22,7 +22,8 @@ export default function AnalyticsPage() {
   useEffect(() => { facilitiesApi.buildings().then((p) => setBuildings(p.data)).catch(() => setBuildings([])); }, []);
   if (!data) return <Loading />;
 
-  const max = Math.max(1, ...(data.monthly ?? []).map((x: any) => x.amount));
+  const monthly = data.monthly ?? [];
+  const max = Math.max(1, ...monthly.map((x: any) => Number(x.amount)));
   const totalSpend = (data.monthly ?? []).reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
   const topProvider = [...(data.byProvider ?? [])].sort((a: any, b: any) => Number(b.amount) - Number(a.amount))[0];
   const catMax = Math.max(1, ...(data.byCategory ?? []).map((x: any) => x.amount));
@@ -45,15 +46,30 @@ export default function AnalyticsPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="p-5">
               <div className="flex items-center justify-between"><h2 className="font-semibold text-charcoal">Spend over time</h2><span className="rounded-full bg-pine/10 px-2 py-0.5 text-[11px] font-medium text-pine">PKR</span></div>
-              {data.monthly?.length ? (
-                <div className="mt-5 flex h-48 items-end gap-2">
-                  {data.monthly.map((row: any) => (
-                    <div key={row.period} className="group flex flex-1 flex-col items-center gap-1">
-                      <span className="text-[10px] font-medium text-pine opacity-0 transition-opacity group-hover:opacity-100">{money(row.amount)}</span>
-                      <div className="w-full rounded-t-md bg-pine/80 transition-colors group-hover:bg-pine" style={{ height: `${Math.max(4, (row.amount / max) * 160)}px` }} title={money(row.amount)} />
-                      <span className="text-[10px] text-sage">{row.period.slice(5)}</span>
-                    </div>
-                  ))}
+              {monthly.length ? (
+                <div className="mt-5 rounded-xl border border-border bg-muted/30 p-3">
+                  <div className="relative h-40">
+                    <div className="absolute inset-x-0 bottom-5 border-b border-border" />
+                    <div className="absolute inset-x-0 top-1/2 border-b border-border/70" />
+                    {monthly.length === 1 ? (
+                      <div className="absolute inset-x-0 bottom-5 flex flex-col items-center">
+                        <span className="mb-2 rounded-full bg-pine px-2.5 py-1 text-[11px] font-semibold text-ivory">{money(monthly[0].amount)}</span>
+                        <span className="h-3 w-3 rounded-full border-2 border-ivory bg-pine shadow-card" title={money(monthly[0].amount)} />
+                      </div>
+                    ) : (
+                      <div className="absolute inset-x-0 bottom-5 flex h-32 items-end gap-2">
+                        {monthly.map((row: any) => (
+                          <div key={row.period} className="group flex flex-1 flex-col items-center justify-end">
+                            <span className="mb-1 text-[10px] font-medium text-pine opacity-0 transition-opacity group-hover:opacity-100">{money(row.amount)}</span>
+                            <span className="w-3 rounded-full bg-pine transition-all group-hover:bg-terracotta" style={{ height: `${Math.max(8, (Number(row.amount) / max) * 112)}px` }} title={money(row.amount)} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-1 flex justify-between text-[10px] text-sage">
+                    {monthly.map((row: any) => <span key={row.period}>{row.period.slice(5)}</span>)}
+                  </div>
                 </div>
               ) : <EmptyState icon={<BarChart3 className="h-5 w-5" />} title="No invoice data yet" />}
             </Card>

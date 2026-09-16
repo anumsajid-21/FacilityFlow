@@ -17,6 +17,19 @@ const TABS = [
   { key: "CLOSED", label: "Closed" },
 ];
 
+const FALLBACK_CATEGORIES = [
+  "Commercial Cleaning",
+  "Glass/Façade Cleaning",
+  "HVAC/AC",
+  "Electrical",
+  "Plumbing",
+  "Pest Control",
+  "Landscaping",
+  "General Facility Maintenance",
+];
+
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 export default function ServiceRequestsPage() {
   const [items, setItems] = useState<any[] | null>(null);
   const [tab, setTab] = useState("all");
@@ -33,7 +46,7 @@ export default function ServiceRequestsPage() {
   const load = () => serviceRequestsApi.list().then((p) => setItems(p.data)).catch(() => setItems([]));
   useEffect(() => {
     load();
-    serviceRequestsApi.categories().then(setCategories).catch(() => setCategories([]));
+    serviceRequestsApi.categories().then(setCategories).catch(() => setCategories(FALLBACK_CATEGORIES.map((name) => ({ id: name, name }))));
     facilitiesApi.buildings().then((p) => {
       setBuildings(p.data);
     }).catch((err) => {
@@ -92,7 +105,8 @@ export default function ServiceRequestsPage() {
         description: form.description.trim(),
         buildingId: form.buildingId,
         priority: form.priority,
-        categoryId: form.categoryId || undefined,
+        // "Other" is a UI-only choice; the API accepts only real category UUIDs.
+        categoryId: isOther || !isUuid(form.categoryId) ? undefined : form.categoryId,
         budget: form.budget ? Number(form.budget) : undefined,
         preferredDate: form.preferredDate || undefined,
         floorId: form.floorId || undefined,
