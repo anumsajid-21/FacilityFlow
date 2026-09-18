@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { MessageCircle, Send, Search, ArrowLeft, ChevronRight, Plus, UserCheck, Building, Mic, Square, Trash2, AlertCircle } from "lucide-react";
-import { messagingApi, providersApi, contractsApi, filesApi, apiError } from "@/services/api";
+import { api, messagingApi, providersApi, contractsApi, filesApi, apiError } from "@/services/api";
 import { Card, EmptyState, Loading, PageHeader, Modal, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
@@ -21,6 +21,37 @@ function formatSeconds(total: number) {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * <audio src="..."> can't send an Authorization header, but /files/:id/download
+ * requires one - so playback silently fails with a 401 no matter how correct
+ * the access-control logic is. Fetch it through the authenticated axios
+ * instance instead and play from the resulting blob: URL.
+ */
+function VoiceMessagePlayer({ fileId, mine }: { fileId: string; mine: boolean }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    api.get(`/files/${fileId}/download`, { responseType: "blob" })
+      .then((res) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(res.data);
+        setSrc(objectUrl);
+      })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [fileId]);
+
+  if (failed) return <span className={cn("text-xs", mine ? "text-ivory/70" : "text-destructive")}>Voice message unavailable</span>;
+  if (!src) return <span className={cn("text-xs", mine ? "text-ivory/70" : "text-sage")}>Loading voice message…</span>;
+  return <audio controls preload="metadata" src={src} className="h-9 max-w-[220px]" />;
 }
 
 export default function MessagesPage() {
@@ -366,7 +397,7 @@ export default function MessagesPage() {
                           {!mine && <p className="mb-0.5 text-[11px] font-semibold text-pine">{m.sender?.name ?? "Other party"}</p>}
                           {m.audioFileId ? (
                             <div className="flex items-center gap-2">
-                              <audio controls preload="none" src={filesApi.url(m.audioFileId)} className="h-9 max-w-[220px]" />
+                              <VoiceMessagePlayer fileId={m.audioFileId} mine={mine} />
                               {m.audioSeconds ? <span className={cn("text-[10px]", mine ? "text-ivory/70" : "text-sage")}>{formatSeconds(m.audioSeconds)}</span> : null}
                             </div>
                           ) : (
