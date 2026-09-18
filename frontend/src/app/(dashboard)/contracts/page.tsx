@@ -20,14 +20,14 @@ export default function ContractsPage() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {contracts.map((c) => (
-            <Link key={c.id} href={`/contracts/${c.id}`} className="group">
+            <Link key={c.id} href={`/contracts/${c.id}`} className="group min-w-0">
               <Card className="flex h-full flex-col transition-all group-hover:border-brass group-hover:shadow-raised">
                 <div className="flex items-start justify-between border-b border-border px-5 py-4">
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-charcoal group-hover:text-pine">{c.title || c.serviceName || "Contract"}</h3>
                     <p className="truncate text-xs text-sage">{c.provider?.name || "Provider"} · {c.organization?.name}</p>
                   </div>
-                  <StatusBadge status={c.status} />
+                  <StatusBadge status={c.status} className="shrink-0" />
                 </div>
                 <div className="flex flex-1 flex-col p-5">
                   <p className="text-2xl font-bold text-charcoal">{money(c.price)}</p>

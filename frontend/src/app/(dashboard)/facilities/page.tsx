@@ -227,17 +227,17 @@ export default function FacilitiesPage() {
           <div className="space-y-2">
             {buildings.map((b) => (
               <Card key={b.id} className={`cursor-pointer transition-all ${selected?.id === b.id ? "border-pine ring-1 ring-pine/30" : "hover:border-brass"}`}>
-                <div className="flex items-center gap-3 p-4">
-                  <div className="rounded-lg bg-pine/10 p-2.5 text-pine"><Building2 className="h-5 w-5" /></div>
+                <div className="flex flex-wrap items-center gap-3 p-4">
+                  <div className="shrink-0 rounded-lg bg-pine/10 p-2.5 text-pine"><Building2 className="h-5 w-5" /></div>
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => selectBuilding(b)}>
                     <p className="truncate font-semibold text-charcoal">{b.name}</p>
                     <p className="flex items-center gap-1 truncate text-xs text-sage"><MapPin className="h-3 w-3" /> {b.city}, {b.address}</p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1">
                     {b.buildingType && <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-sage">{b.buildingType}</span>}
                     {b.numberOfFloors ? <span className="flex items-center gap-1 text-xs text-sage"><Layers className="h-3 w-3" /> {b.numberOfFloors}</span> : null}
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1">
                     <button onClick={() => startEdit(b)} className="rounded p-1 text-sage hover:bg-pine/10 hover:text-pine" title="Edit building"><Pencil className="h-4 w-4" /></button>
                     <button onClick={() => removeBuilding(b.id)} className="rounded p-1 text-sage hover:bg-terracotta-soft hover:text-terracotta" title="Delete building"><Trash2 className="h-4 w-4" /></button>
                   </div>
@@ -308,12 +308,12 @@ export default function FacilitiesPage() {
           </div>
 
           <div className="rounded-xl border border-border bg-muted/40 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-charcoal">Floors &amp; areas (optional)</p>
                 <p className="text-xs text-sage">Structure the building now — you can also add these later from the building view.</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-sage">Floors:</span>
                   <input

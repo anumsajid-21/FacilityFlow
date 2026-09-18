@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Plus, Search, AlertCircle } from "lucide-react";
+import { FileText, Plus, Search, AlertCircle, Sparkles, Loader2, CheckCircle2, Mic, MicOff } from "lucide-react";
 import { serviceRequestsApi, facilitiesApi, apiError } from "@/services/api";
 import { Card, PageHeader, EmptyState, Modal, Field, Input, Textarea, Select, Loading, Tabs, StatusBadge } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
-import { dateShort, money } from "@/lib/utils";
+import { cn, dateShort, money } from "@/lib/utils";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -43,6 +43,51 @@ export default function ServiceRequestsPage() {
   const [form, setForm] = useState({ title: "", description: "", categoryId: "", buildingId: "", floorId: "", areaId: "", priority: "NORMAL", budget: "", preferredDate: "" });
   const [categories, setCategories] = useState<any[]>([]);
 
+  // AI Assist — purely a helper that pre-fills the fields above; submission still goes through create().
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiText, setAiText] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<{ category: { id: string; name: string } | null; title: string; description: string; priority: string; followUpQuestions: string[] } | null>(null);
+  const [aiAnswers, setAiAnswers] = useState<Record<string, string>>({});
+  const [aiApplied, setAiApplied] = useState(false);
+
+  // Voice dictation for the AI Assist description — speech-to-text only, no audio is ever uploaded.
+  const [dictating, setDictating] = useState(false);
+  const [dictationError, setDictationError] = useState("");
+  const recognitionRef = useRef<any>(null);
+  const voiceInputSupported = typeof window !== "undefined" && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+
+  const toggleDictation = () => {
+    if (dictating) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) { setDictationError("Voice input isn't supported in this browser."); return; }
+    setDictationError("");
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+      if (transcript.trim()) setAiText((prev) => (prev.trim() ? `${prev.trim()} ${transcript.trim()}` : transcript.trim()));
+    };
+    recognition.onerror = (event: any) => {
+      setDictationError(event.error === "not-allowed" ? "Microphone access was denied. Allow microphone access to dictate." : "Voice input stopped unexpectedly.");
+      setDictating(false);
+    };
+    recognition.onend = () => setDictating(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setDictating(true);
+  };
+
+  useEffect(() => () => { recognitionRef.current?.stop(); }, []);
+
   const load = () => serviceRequestsApi.list().then((p) => setItems(p.data)).catch(() => setItems([]));
   useEffect(() => {
     load();
@@ -53,7 +98,54 @@ export default function ServiceRequestsPage() {
       console.error("Failed to load buildings:", err);
       setBuildings([]);
     });
+    serviceRequestsApi.aiAssistStatus().then((r) => setAiEnabled(!!r?.enabled)).catch(() => setAiEnabled(false));
   }, []);
+
+  const resetAi = () => {
+    setAiOpen(false);
+    setAiText("");
+    setAiLoading(false);
+    setAiError("");
+    setAiSuggestion(null);
+    setAiAnswers({});
+    setAiApplied(false);
+  };
+
+  const runAiAssist = async () => {
+    if (aiText.trim().length < 10) {
+      setAiError("Please describe the problem in a bit more detail (at least 10 characters).");
+      return;
+    }
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const result = await serviceRequestsApi.aiAssist(aiText.trim(), Object.keys(aiAnswers).length ? aiAnswers : undefined);
+      if (!result || typeof result.title !== "string" || typeof result.description !== "string") {
+        throw new Error("AI Assist returned an unexpected response.");
+      }
+      setAiSuggestion(result);
+      setAiApplied(false);
+    } catch (e) {
+      setAiSuggestion(null);
+      setAiError(apiError(e) || "AI Assist couldn't analyze this description. You can still fill in the form manually.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAiSuggestion = () => {
+    if (!aiSuggestion) return;
+    const matchedCategory = aiSuggestion.category ? categories.find((c) => c.id === aiSuggestion.category!.id) : null;
+    setForm((f) => ({
+      ...f,
+      categoryId: matchedCategory ? matchedCategory.id : "OTHER",
+      title: matchedCategory ? f.title : aiSuggestion.title,
+      description: aiSuggestion.description,
+      priority: ["LOW", "NORMAL", "HIGH", "URGENT"].includes(aiSuggestion.priority) ? aiSuggestion.priority : f.priority,
+    }));
+    setAiApplied(true);
+    toast.success("Suggestions applied", "Review the fields below, then submit as usual.");
+  };
 
   useEffect(() => {
     if (form.buildingId) {
@@ -139,6 +231,7 @@ export default function ServiceRequestsPage() {
     setAreas([]);
     setError("");
     setOpenCreate(false);
+    resetAi();
   };
 
   return (
@@ -174,6 +267,95 @@ export default function ServiceRequestsPage() {
               <span>{error}</span>
             </div>
           )}
+
+          {aiEnabled && (
+            <div className="rounded-xl border border-brass/40 bg-brass-soft/30 p-3">
+              {!aiOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setAiOpen(true)}
+                  className="flex w-full items-center gap-2 text-left text-sm font-medium text-pine hover:underline"
+                >
+                  <Sparkles className="h-4 w-4 shrink-0 text-brass" /> Not sure how to fill this in? Describe the problem and let AI Assist suggest the details.
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-charcoal">
+                    <Sparkles className="h-4 w-4 text-brass" /> AI Assist
+                  </div>
+                  <Field label="Describe the problem in your own words">
+                    <div className="relative">
+                      <Textarea
+                        value={aiText}
+                        onChange={(e) => setAiText(e.target.value)}
+                        placeholder="e.g. The AC in our second-floor meeting room is not cooling and is leaking water."
+                        rows={3}
+                        className="pr-11"
+                      />
+                      {voiceInputSupported && (
+                        <button
+                          type="button"
+                          onClick={toggleDictation}
+                          title={dictating ? "Stop dictation" : "Dictate with your microphone"}
+                          className={cn(
+                            "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-colors",
+                            dictating ? "animate-pulse bg-destructive text-ivory" : "bg-muted text-sage hover:text-pine",
+                          )}
+                        >
+                          {dictating ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                    {dictationError && <p className="mt-1 text-xs text-destructive">{dictationError}</p>}
+                  </Field>
+                  {aiError && (
+                    <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" /> <span>{aiError}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button type="button" size="sm" onClick={runAiAssist} disabled={aiLoading}>
+                      {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      {aiSuggestion ? "Re-analyze" : "Analyze"}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={resetAi}>Cancel</Button>
+                  </div>
+
+                  {aiSuggestion && (
+                    <div className="space-y-3 rounded-lg border border-border bg-ivory p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-sage">Suggested details</p>
+                      <dl className="space-y-1 text-sm">
+                        <div className="flex gap-2"><dt className="w-20 shrink-0 text-sage">Category</dt><dd className="text-charcoal">{aiSuggestion.category?.name ?? "Other"}</dd></div>
+                        <div className="flex gap-2"><dt className="w-20 shrink-0 text-sage">Title</dt><dd className="text-charcoal">{aiSuggestion.title}</dd></div>
+                        <div className="flex gap-2"><dt className="w-20 shrink-0 text-sage">Priority</dt><dd className="text-charcoal">{aiSuggestion.priority}</dd></div>
+                        <div className="flex gap-2"><dt className="w-20 shrink-0 text-sage">Details</dt><dd className="text-charcoal">{aiSuggestion.description}</dd></div>
+                      </dl>
+
+                      {aiSuggestion.followUpQuestions.length > 0 && (
+                        <div className="space-y-2 border-t border-border pt-2">
+                          <p className="text-xs font-semibold text-sage">A few optional details would help — answer any that apply, then re-analyze:</p>
+                          {aiSuggestion.followUpQuestions.map((q) => (
+                            <Field key={q} label={q}>
+                              <Input
+                                value={aiAnswers[q] ?? ""}
+                                onChange={(e) => setAiAnswers((a) => ({ ...a, [q]: e.target.value }))}
+                              />
+                            </Field>
+                          ))}
+                        </div>
+                      )}
+
+                      <Button type="button" size="sm" onClick={applyAiSuggestion} disabled={aiApplied} className="gap-1.5">
+                        {aiApplied ? <><CheckCircle2 className="h-3.5 w-3.5" /> Applied to form below</> : "Use these suggestions"}
+                      </Button>
+                      <p className="text-[11px] text-sage">You can still edit every field below before submitting — nothing is sent until you click Create.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <Field label="Category">
             <Select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
               <option value="">Select a category…</option>

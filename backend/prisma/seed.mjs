@@ -71,6 +71,12 @@ const CHECKLISTS = [
     items: ['Walkthrough', 'Identify issues', 'Perform maintenance', 'Safety check', 'Final inspection'],
   },
 ];
+// Hiring-org and admin seed accounts. Provider accounts live in DEMO_PROVIDERS
+// below — keeping every account defined in exactly one place avoids the two
+// lists silently fighting over the same email/company (previously both this
+// list and DEMO_PROVIDERS created "Prime HVAC", which just meant the second
+// pass always overwrote the first — harmless, but confusing and it produced
+// a duplicate row in the printed credentials table).
 const DEMO_USERS = [
   {
     email: 'hiring@facilityflow.app',
@@ -78,13 +84,6 @@ const DEMO_USERS = [
     name: 'QX Industry Manager',
     role: 'HIRING_ORG',
     organization: 'QX Industry',
-  },
-  {
-    email: 'primehvac@facilityflow.app',
-    password: 'Provide@12345',
-    name: 'Demo Provider Manager',
-    role: 'PROVIDER',
-    provider: 'Prime HVAC',
   },
   {
     email: 'admin@facilityflow.app',
@@ -143,17 +142,11 @@ async function seedDemoUsers() {
     }
 
     let hiringOrgId = null;
-    let providerId = null;
 
     if (u.role === 'HIRING_ORG' && u.organization) {
-      const org = await prisma.organization.create({ data: { name: u.organization } });
+      const existingOrg = await prisma.organization.findFirst({ where: { name: u.organization } });
+      const org = existingOrg ?? (await prisma.organization.create({ data: { name: u.organization } }));
       hiringOrgId = org.id;
-    }
-    if (u.role === 'PROVIDER' && u.provider) {
-      const provider = await prisma.provider.create({
-        data: { name: u.provider, verificationStatus: 'VERIFIED', workforceCapacity: 12 },
-      });
-      providerId = provider.id;
     }
 
     const user = await prisma.user.create({
@@ -163,7 +156,6 @@ async function seedDemoUsers() {
         name: u.name,
         role: u.role,
         hiringOrgId,
-        providerId,
       },
     });
 
@@ -333,7 +325,7 @@ async function seedBusinessData(org, providers, categories) {
   const acceptedQuote = await prisma.quotation.create({
     data: {
       serviceRequestId: srCleaning.id,
-      providerId: providers[2].id,
+      providerId: providers[1].id,
       price: 750,
       numberOfWorkers: 4,
       duration: '1 day',
@@ -351,7 +343,7 @@ async function seedBusinessData(org, providers, categories) {
   const contract = await prisma.contract.create({
     data: {
       organizationId: org.id,
-      providerId: providers[2].id,
+      providerId: providers[1].id,
       serviceRequestId: srCleaning.id,
       quotationId: acceptedQuote.id,
       buildingId: srCleaning.buildingId,
@@ -535,6 +527,82 @@ async function seedExtendedBusiness(org, providers, workers) {
       });
     }
   }
+
+  // --- Fill remaining coverage gaps so every core feature has >= 2 example records ---
+
+  // Payments: settle the cleaning invoice in full and partially pay the HVAC one.
+  const demoInvoice1 = await prisma.invoice.findUnique({ where: { invoiceNumber: 'DEMO-0001' } });
+  if (demoInvoice1 && orgUser) {
+    const existingPayment = await prisma.payment.findFirst({ where: { paymentReference: 'DEMO-PAY-0001' } });
+    if (!existingPayment) {
+      await prisma.payment.create({ data: { invoiceId: demoInvoice1.id, amount: demoInvoice1.total, paymentReference: 'DEMO-PAY-0001', paymentMethod: 'BANK_TRANSFER', date: new Date(), status: 'COMPLETED', recordedById: orgUser.id } });
+      await prisma.invoice.update({ where: { id: demoInvoice1.id }, data: { status: 'PAID' } });
+    }
+  }
+  const demoInvoice2 = await prisma.invoice.findUnique({ where: { invoiceNumber: 'DEMO-0002' } });
+  if (demoInvoice2 && orgUser) {
+    const existingPayment = await prisma.payment.findFirst({ where: { paymentReference: 'DEMO-PAY-0002' } });
+    if (!existingPayment) {
+      await prisma.payment.create({ data: { invoiceId: demoInvoice2.id, amount: Math.round(Number(demoInvoice2.total) * 0.4), paymentReference: 'DEMO-PAY-0002', paymentMethod: 'CARD', date: new Date(), status: 'COMPLETED', recordedById: orgUser.id } });
+    }
+  }
+
+  // Reviews: a second review on the HVAC provider so this feature isn't a single row.
+  const hvacProvider = providers[0];
+  const hvacJobRow = await prisma.job.findFirst({ where: { title: 'Quarterly HVAC inspection' } });
+  if (hvacProvider && hvacJobRow) {
+    await prisma.review.upsert({
+      where: { organizationId_providerId_jobId: { organizationId: org.id, providerId: hvacProvider.id, jobId: hvacJobRow.id } },
+      update: {},
+      create: { organizationId: org.id, providerId: hvacProvider.id, jobId: hvacJobRow.id, quality: 4, timeliness: 5, professionalism: 4, value: 4, overallRating: 4.25, comments: 'Prompt scheduling and thorough filter replacement.' },
+    });
+  }
+
+  // Messages: a second conversation, this time with the HVAC provider.
+  const hvacProviderUser = hvacProvider ? await prisma.user.findFirst({ where: { providerId: hvacProvider.id, role: 'PROVIDER' } }) : null;
+  if (hvacProvider && hvacProviderUser && orgUser) {
+    const existingThread = await prisma.messageThread.findFirst({ where: { organizationId: org.id, providerId: hvacProvider.id, subject: 'HVAC maintenance scheduling' } });
+    if (!existingThread) {
+      await prisma.messageThread.create({
+        data: {
+          organizationId: org.id, providerId: hvacProvider.id, subject: 'HVAC maintenance scheduling', createdById: orgUser.id,
+          messages: { create: [
+            { senderId: orgUser.id, body: 'Can your team do the quarterly inspection next Tuesday morning?' },
+            { senderId: hvacProviderUser.id, body: 'Yes, we can be there at 9 AM. I will send the technician roster beforehand.' },
+          ] },
+        },
+      });
+    }
+  }
+
+  // Verification documents: gives the admin verification queue real rows to review.
+  for (const [provider, docType] of [[providers[0], 'Business License'], [providers[1], 'Insurance Certificate']]) {
+    if (!provider) continue;
+    const existingDoc = await prisma.verificationDocument.findFirst({ where: { providerId: provider.id, documentType: docType } });
+    if (existingDoc) continue;
+    const file = await prisma.file.create({
+      data: {
+        originalName: `${provider.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${docType.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pdf`,
+        mimeType: 'application/pdf',
+        size: 128_000,
+        storageKey: `demo_files/verification_${provider.id}_${docType.replace(/\s+/g, '_')}.pdf`,
+        kind: 'PROVIDER_DOCUMENT',
+      },
+    });
+    await prisma.verificationDocument.create({ data: { providerId: provider.id, documentType: docType, fileId: file.id } });
+  }
+
+  // Checklist results: mark a couple of items complete on the lobby-clean job.
+  if (job) {
+    const checklist = await prisma.checklist.findFirst({ where: { name: 'Commercial Cleaning Standard' }, include: { items: { orderBy: { sortOrder: 'asc' }, take: 2 } } });
+    for (const item of checklist?.items ?? []) {
+      await prisma.jobChecklistResult.upsert({
+        where: { jobId_checklistItemId: { jobId: job.id, checklistItemId: item.id } },
+        update: {},
+        create: { jobId: job.id, checklistId: checklist.id, checklistItemId: item.id, isChecked: true },
+      });
+    }
+  }
 }
 
 async function seedSecondOrganization(categories) {
@@ -592,9 +660,12 @@ async function seedMetroPipeline(ctx) {
   ];
   const createdSRs = [];
   for (const spec of srSpecs) {
-    const floor = await prisma.floor.findFirst({ where: { buildingId: spec.building.id } });
-    const area = await prisma.area.findFirst({ where: { floorId: floor.id } });
-    const sr = await prisma.serviceRequest.create({ data: { organizationId: org.id, createdById: user.id, categoryId: spec.category, title: spec.title, description: `${spec.title} — seeded demo request.`, buildingId: spec.building.id, floorId: floor.id, areaId: area.id, budget: 900, priority: spec.priority, status: spec.status } });
+    let sr = await prisma.serviceRequest.findFirst({ where: { organizationId: org.id, title: spec.title } });
+    if (!sr) {
+      const floor = await prisma.floor.findFirst({ where: { buildingId: spec.building.id } });
+      const area = await prisma.area.findFirst({ where: { floorId: floor.id } });
+      sr = await prisma.serviceRequest.create({ data: { organizationId: org.id, createdById: user.id, categoryId: spec.category, title: spec.title, description: `${spec.title} — seeded demo request.`, buildingId: spec.building.id, floorId: floor.id, areaId: area.id, budget: 900, priority: spec.priority, status: spec.status } });
+    }
     createdSRs.push({ sr, spec });
   }
 
@@ -606,11 +677,14 @@ async function seedMetroPipeline(ctx) {
     const provider = providersForQuotes[quoteIdx % providersForQuotes.length];
     let status = quoteStatuses[quoteIdx % quoteStatuses.length];
     if (spec.status === 'PROVIDER_SELECTED') status = 'ACCEPTED';
-    await prisma.quotation.create({ data: { serviceRequestId: sr.id, providerId: provider.id, price: 1500 + quoteIdx * 250, duration: `${10 + quoteIdx} days`, notes: `Seeded demo quotation (${status}).`, status, submittedAt: new Date() } });
+    const existingQuote = await prisma.quotation.findFirst({ where: { serviceRequestId: sr.id, providerId: provider.id } });
+    if (!existingQuote) {
+      await prisma.quotation.create({ data: { serviceRequestId: sr.id, providerId: provider.id, price: 1500 + quoteIdx * 250, duration: `${10 + quoteIdx} days`, notes: `Seeded demo quotation (${status}).`, status, submittedAt: new Date() } });
+    }
     quoteIdx++;
   }
 
-  const acceptedQuote = await prisma.quotation.findFirst({ where: { serviceRequest: { organizationId: org.id }, status: 'ACCEPTED' }, include: { serviceRequest: true } });
+  const acceptedQuote = await prisma.quotation.findFirst({ where: { serviceRequest: { organizationId: org.id }, status: 'ACCEPTED' }, include: { serviceRequest: true }, orderBy: { submittedAt: 'asc' } });
   if (acceptedQuote) {
     const existingContract = await prisma.contract.findUnique({ where: { quotationId: acceptedQuote.id } });
     if (!existingContract) {
@@ -619,8 +693,14 @@ async function seedMetroPipeline(ctx) {
   }
   const closedSR = createdSRs.find((c) => c.spec.status === 'CLOSED');
   if (closedSR && demoProvider) {
-    const q = await prisma.quotation.create({ data: { serviceRequestId: closedSR.sr.id, providerId: demoProvider.id, price: 2600, duration: '14 days', notes: 'Completed historical work.', status: 'ACCEPTED', submittedAt: new Date(Date.now() - 310 * 864e5) } });
-    await prisma.contract.create({ data: { organizationId: org.id, providerId: demoProvider.id, serviceRequestId: closedSR.sr.id, quotationId: q.id, buildingId: closedSR.spec.building.id, serviceName: 'Electrical', title: 'Wing Electrical Refit - Completed', price: 2600, startDate: new Date(Date.now() - 300 * 864e5), endDate: new Date(Date.now() - 30 * 864e5), status: 'TERMINATED' } });
+    let q = await prisma.quotation.findFirst({ where: { serviceRequestId: closedSR.sr.id, providerId: demoProvider.id } });
+    if (!q) {
+      q = await prisma.quotation.create({ data: { serviceRequestId: closedSR.sr.id, providerId: demoProvider.id, price: 2600, duration: '14 days', notes: 'Completed historical work.', status: 'ACCEPTED', submittedAt: new Date(Date.now() - 310 * 864e5) } });
+    }
+    const existingClosedContract = await prisma.contract.findUnique({ where: { quotationId: q.id } });
+    if (!existingClosedContract) {
+      await prisma.contract.create({ data: { organizationId: org.id, providerId: demoProvider.id, serviceRequestId: closedSR.sr.id, quotationId: q.id, buildingId: closedSR.spec.building.id, serviceName: 'Electrical', title: 'Wing Electrical Refit - Completed', price: 2600, startDate: new Date(Date.now() - 300 * 864e5), endDate: new Date(Date.now() - 30 * 864e5), status: 'TERMINATED' } });
+    }
   }
 
   const activeContract = await prisma.contract.findFirst({ where: { organizationId: org.id, status: 'ACTIVE' }, include: { jobs: true } });
@@ -697,7 +777,10 @@ async function seedMetroPipeline(ctx) {
     }
     const reworkEntry = metroJobs.find((m) => m.spec.status === 'REWORK');
     if (reworkEntry) {
-      await prisma.reworkRequest.create({ data: { jobId: reworkEntry.job.id, requestedById: user.id, reason: 'Two outlets failed post-inspection testing.' } });
+      const existingRework = await prisma.reworkRequest.findFirst({ where: { jobId: reworkEntry.job.id } });
+      if (!existingRework) {
+        await prisma.reworkRequest.create({ data: { jobId: reworkEntry.job.id, requestedById: user.id, reason: 'Two outlets failed post-inspection testing.' } });
+      }
     }
     // 6+ months of payment history across invoices
     for (let m = 7; m >= 1; m--) {
@@ -707,20 +790,30 @@ async function seedMetroPipeline(ctx) {
       const invNumber = `METRO-${String(1000 + m)}`;
       const invoice = await prisma.invoice.upsert({ where: { invoiceNumber: invNumber }, update: {}, create: { invoiceNumber: invNumber, providerId: activeContract.providerId, organizationId: org.id, contractId: activeContract.id, amount, tax: Math.round(amount * 0.1), discount: 0, total: Math.round(amount * 1.1), dueDate: new Date(invMonth.getTime() + 21 * 864e5), status: paid ? 'PAID' : 'PENDING' } });
       if (paid) {
-        await prisma.payment.create({ data: { invoiceId: invoice.id, amount: invoice.total, paymentReference: `METRO-PAY-${m}`, paymentMethod: 'BANK_TRANSFER', date: new Date(invMonth.getTime() + 18 * 864e5), status: 'COMPLETED', recordedById: user.id } });
+        const paymentRef = `METRO-PAY-${m}`;
+        const existingPayment = await prisma.payment.findFirst({ where: { paymentReference: paymentRef } });
+        if (!existingPayment) {
+          await prisma.payment.create({ data: { invoiceId: invoice.id, amount: invoice.total, paymentReference: paymentRef, paymentMethod: 'BANK_TRANSFER', date: new Date(invMonth.getTime() + 18 * 864e5), status: 'COMPLETED', recordedById: user.id } });
+        }
       }
     }
     await prisma.review.upsert({ where: { organizationId_providerId_jobId: { organizationId: org.id, providerId: activeContract.providerId, jobId: metroJobs[0].job.id } }, update: {}, create: { organizationId: org.id, providerId: activeContract.providerId, jobId: metroJobs[0].job.id, quality: 4, timeliness: 2, professionalism: 4, value: 3, overallRating: 3.25, comments: 'Work complete but SLA deadline was missed.' } });
-    await prisma.notification.createMany({ data: [
-      { userId: user.id, type: 'SLA_BREACH', title: 'SLA breached', message: 'Panel inspection job breached its SLA deadline.', isRead: true },
-      { userId: user.id, type: 'REWORK_REQUESTED', title: 'Rework requested', message: 'Outlet replacement job needs rework.', isRead: false },
-      { userId: user.id, type: 'INVOICE_ISSUED', title: 'New invoice', message: 'A new invoice is awaiting your payment.', isRead: false },
-    ] });
-    await prisma.auditLog.createMany({ data: [
-      { actorId: user.id, action: 'CONTRACT_CREATED', entityType: 'Contract', entityId: activeContract.id, details: 'Contract created via seed' },
-      { actorId: user.id, action: 'JOB_CREATED', entityType: 'Job', entityId: metroJobs[0].job.id, details: 'Panel inspection job created' },
-      { actorId: user.id, action: 'REWORK_REQUESTED', entityType: 'ReworkRequest', entityId: (reworkEntry?.job ?? metroJobs[1].job).id, details: 'Rework requested by org' },
-    ] });
+    const existingSeedNotification = await prisma.notification.findFirst({ where: { userId: user.id, type: 'SLA_BREACH', title: 'SLA breached' } });
+    if (!existingSeedNotification) {
+      await prisma.notification.createMany({ data: [
+        { userId: user.id, type: 'SLA_BREACH', title: 'SLA breached', message: 'Panel inspection job breached its SLA deadline.', isRead: true },
+        { userId: user.id, type: 'REWORK_REQUESTED', title: 'Rework requested', message: 'Outlet replacement job needs rework.', isRead: false },
+        { userId: user.id, type: 'INVOICE_ISSUED', title: 'New invoice', message: 'A new invoice is awaiting your payment.', isRead: false },
+      ] });
+    }
+    const existingSeedAudit = await prisma.auditLog.findFirst({ where: { entityType: 'Contract', entityId: activeContract.id, action: 'CONTRACT_CREATED' } });
+    if (!existingSeedAudit) {
+      await prisma.auditLog.createMany({ data: [
+        { actorId: user.id, action: 'CONTRACT_CREATED', entityType: 'Contract', entityId: activeContract.id, details: 'Contract created via seed' },
+        { actorId: user.id, action: 'JOB_CREATED', entityType: 'Job', entityId: metroJobs[0].job.id, details: 'Panel inspection job created' },
+        { actorId: user.id, action: 'REWORK_REQUESTED', entityType: 'ReworkRequest', entityId: (reworkEntry?.job ?? metroJobs[1].job).id, details: 'Rework requested by org' },
+      ] });
+    }
   }
 }
 async function main() {
@@ -744,7 +837,6 @@ async function main() {
   console.log('\nDemo credentials');
   console.table([
     ...DEMO_USERS.map(({ email, password, role }) => ({ role, email, password })),
-    { role: 'HIRING_ORG', email: 'ops@facilityflow.app', password: 'Hire@12345' },
     { role: 'HIRING_ORG', email: 'ops@metrohealth.app', password: 'Hire@12345' },
     ...DEMO_PROVIDERS.map(({ email, password }) => ({ role: 'PROVIDER', email, password })),
     ...DEMO_WORKERS.map(({ email, password }) => ({ role: 'WORKER', email, password })),

@@ -1,12 +1,27 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { MessageCircle, Send, Search, ArrowLeft, ChevronRight, Plus, UserCheck, Building } from "lucide-react";
-import { messagingApi, providersApi, contractsApi, apiError } from "@/services/api";
+import { MessageCircle, Send, Search, ArrowLeft, ChevronRight, Plus, UserCheck, Building, Mic, Square, Trash2, AlertCircle } from "lucide-react";
+import { messagingApi, providersApi, contractsApi, filesApi, apiError } from "@/services/api";
 import { Card, EmptyState, Loading, PageHeader, Modal, Field, Input, Textarea } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/store/toast";
 import { useAuthStore } from "@/store/auth";
+import { useUnreadStore } from "@/store/unread";
 import { cn, timeAgo, timeShort } from "@/lib/utils";
+
+const VOICE_MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+function pickVoiceMime(): string | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const type of VOICE_MIME_CANDIDATES) {
+    if (MediaRecorder.isTypeSupported?.(type)) return type;
+  }
+  return "";
+}
+function formatSeconds(total: number) {
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function MessagesPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -27,6 +42,95 @@ export default function MessagesPage() {
   const [newSubject, setNewSubject] = useState("");
   const [initialMessage, setInitialMessage] = useState("");
   const [startingChat, setStartingChat] = useState(false);
+
+  // Voice messages
+  const voiceSupported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  const stopTimer = () => { if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; } };
+  const releaseStream = () => { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; };
+
+  const startRecording = async () => {
+    setVoiceError("");
+    const mime = pickVoiceMime();
+    if (mime === null) { setVoiceError("Voice messages aren't supported in this browser."); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        setRecordedBlob(blob);
+        setRecordedUrl(URL.createObjectURL(blob));
+        releaseStream();
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setRecordSeconds(0);
+      timerRef.current = window.setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+    } catch (e: any) {
+      if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
+        setVoiceError("Microphone access was denied. Allow microphone access to send a voice message.");
+      } else {
+        setVoiceError("Could not access the microphone on this device.");
+      }
+    }
+  };
+
+  const stopRecording = () => {
+    stopTimer();
+    setRecording(false);
+    mediaRecorderRef.current?.stop();
+  };
+
+  const cancelRecording = () => {
+    stopTimer();
+    setRecording(false);
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    releaseStream();
+  };
+
+  const discardRecorded = () => {
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    setRecordedBlob(null);
+    setRecordedUrl(null);
+    setRecordSeconds(0);
+  };
+
+  const sendVoice = async () => {
+    if (!selected || !recordedBlob) return;
+    setSendingVoice(true);
+    try {
+      const file = new File([recordedBlob], `voice-message.${(recordedBlob.type.split("/")[1] || "webm").split(";")[0]}`, { type: recordedBlob.type });
+      const uploaded = await filesApi.upload(file, "MESSAGE_AUDIO");
+      const message = await messagingApi.send(selected.id, "", { audioFileId: uploaded.id, audioSeconds: recordSeconds });
+      setSelected((prev: any) => ({ ...prev, messages: [...(prev.messages || []), message] }));
+      discardRecorded();
+      load();
+      void useUnreadStore.getState().refreshMessages();
+    } catch (e) {
+      toast.error("Voice message failed", apiError(e));
+    } finally {
+      setSendingVoice(false);
+    }
+  };
+
+  useEffect(() => () => { stopTimer(); releaseStream(); if (recordedUrl) URL.revokeObjectURL(recordedUrl); }, []);
 
   const load = () => messagingApi.threads().then((r) => setThreads(r.threads ?? r)).catch(() => setThreads([]));
   useEffect(() => {
@@ -93,12 +197,16 @@ export default function MessagesPage() {
   };
 
   const open = async (id: string) => {
+    if (recording) cancelRecording();
+    discardRecorded();
+    setVoiceError("");
     try {
       const threadData = await messagingApi.thread(id);
       setSelected(threadData);
       setMobileChatOpen(true);
-      // Refresh thread list to clear unread indicator
+      // Refresh thread list + shared badge state to clear unread indicator everywhere.
       load();
+      void useUnreadStore.getState().refreshMessages();
     } catch (e) { toast.error("Unable to open thread", apiError(e)); }
   };
 
@@ -110,6 +218,7 @@ export default function MessagesPage() {
       setSelected({ ...selected, messages: [...(selected.messages || []), message] });
       setBody("");
       load();
+      void useUnreadStore.getState().refreshMessages();
     } catch (e) { toast.error("Message failed", apiError(e)); } finally { setBusy(false); }
   };
 
@@ -200,7 +309,7 @@ export default function MessagesPage() {
             <div className="flex-1 divide-y divide-border overflow-y-auto">
               {filtered.length === 0 ? (
                 <div className="p-6 text-center text-sm text-sage">
-                  <p>No conversations match “{search}”.</p>
+                  <p>{search.trim() ? `No conversations match "${search}".` : "No conversations yet."}</p>
                   <Button variant="outline" size="sm" onClick={handleOpenNewChat} className="mt-3">
                     <Plus className="mr-1.5 h-3.5 w-3.5" /> Start new chat
                   </Button>
@@ -221,7 +330,7 @@ export default function MessagesPage() {
                       </div>
                       <div className="mt-0.5 flex items-center justify-between gap-2">
                         <p className={cn("truncate text-xs", unread > 0 ? "font-medium text-charcoal" : "text-sage")}>
-                          {last ? `${last.senderId === meId ? "You: " : ""}${last.body}` : "No messages yet"}
+                          {last ? `${last.senderId === meId ? "You: " : ""}${last.audioFileId ? "🎤 Voice message" : last.body}` : "No messages yet"}
                         </p>
                         {unread > 0 && (
                           <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-pine px-1.5 text-[10px] font-semibold text-ivory">
@@ -255,7 +364,14 @@ export default function MessagesPage() {
                         <div className={cn("max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-card sm:max-w-[70%]",
                           mine ? "rounded-br-md bg-pine text-ivory" : "rounded-bl-md bg-ivory text-charcoal")}>
                           {!mine && <p className="mb-0.5 text-[11px] font-semibold text-pine">{m.sender?.name ?? "Other party"}</p>}
-                          <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                          {m.audioFileId ? (
+                            <div className="flex items-center gap-2">
+                              <audio controls preload="none" src={filesApi.url(m.audioFileId)} className="h-9 max-w-[220px]" />
+                              {m.audioSeconds ? <span className={cn("text-[10px]", mine ? "text-ivory/70" : "text-sage")}>{formatSeconds(m.audioSeconds)}</span> : null}
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                          )}
                           <p className={cn("mt-1 text-right text-[10px]", mine ? "text-ivory/60" : "text-sage")}>{timeShort(m.createdAt)}</p>
                         </div>
                       </div>
@@ -263,14 +379,45 @@ export default function MessagesPage() {
                   })}
                   {selected.messages?.length === 0 && <p className="py-8 text-center text-sm text-sage">No messages yet — say hello 👋</p>}
                 </div>
-                <div className="flex items-end gap-2 border-t border-border bg-ivory p-3">
-                  <textarea value={body} onChange={(e) => setBody(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                    placeholder="Write a message…" rows={1}
-                    className="max-h-32 min-h-10 flex-1 resize-y rounded-full border border-border bg-muted/50 px-4 py-2.5 text-sm text-charcoal outline-none placeholder:text-sage/70 focus:border-brass" />
-                  <Button onClick={send} disabled={busy || !body.trim()} className="shrink-0 rounded-full px-4" aria-label="Send message">
-                    <Send className="h-4 w-4" />
-                  </Button>
+                <div className="border-t border-border bg-ivory p-3">
+                  {voiceError && (
+                    <div className="mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" /> <span>{voiceError}</span>
+                    </div>
+                  )}
+                  {recording ? (
+                    <div className="flex items-center gap-3 rounded-full border border-destructive/30 bg-destructive/5 px-4 py-2">
+                      <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />
+                      <span className="flex-1 text-sm font-medium text-charcoal">Recording… {formatSeconds(recordSeconds)}</span>
+                      <button type="button" onClick={cancelRecording} aria-label="Cancel recording" className="rounded-full p-1.5 text-sage hover:bg-muted"><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" onClick={stopRecording} aria-label="Stop recording" className="flex items-center gap-1.5 rounded-full bg-pine px-3 py-1.5 text-xs font-semibold text-ivory"><Square className="h-3 w-3" /> Stop</button>
+                    </div>
+                  ) : recordedUrl ? (
+                    <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5">
+                      <audio controls src={recordedUrl} className="h-9 flex-1" />
+                      <span className="shrink-0 text-xs text-sage">{formatSeconds(recordSeconds)}</span>
+                      <button type="button" onClick={discardRecorded} aria-label="Discard recording" className="shrink-0 rounded-full p-1.5 text-sage hover:bg-muted"><Trash2 className="h-4 w-4" /></button>
+                      <Button onClick={sendVoice} disabled={sendingVoice} loading={sendingVoice} size="sm" className="shrink-0 rounded-full" aria-label="Send voice message">
+                        <Send className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-end gap-2">
+                      <textarea value={body} onChange={(e) => setBody(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                        placeholder="Write a message…" rows={1}
+                        className="max-h-32 min-h-10 flex-1 resize-y rounded-full border border-border bg-muted/50 px-4 py-2.5 text-sm text-charcoal outline-none placeholder:text-sage/70 focus:border-brass" />
+                      {voiceSupported && !body.trim() && (
+                        <button type="button" onClick={startRecording} aria-label="Record a voice message" title="Record a voice message"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-muted/50 text-sage hover:text-pine">
+                          <Mic className="h-4 w-4" />
+                        </button>
+                      )}
+                      <Button onClick={send} disabled={busy || !body.trim()} className="shrink-0 rounded-full px-4" aria-label="Send message">
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

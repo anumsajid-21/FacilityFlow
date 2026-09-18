@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useAuthStore } from "@/store/auth";
+import { useUnreadStore } from "@/store/unread";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, ready, restore } = useAuthStore();
@@ -18,6 +19,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (ready && !isAuthenticated) router.push("/login");
   }, [ready, isAuthenticated, router]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void useUnreadStore.getState().refreshAll();
+    const interval = setInterval(() => void useUnreadStore.getState().refreshAll(), 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
   if (!ready || !isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-sand">
@@ -27,7 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col lg:flex-row">
       <Sidebar />
       <div className="flex flex-1 flex-col min-w-0">
         <TopBar />

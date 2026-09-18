@@ -59,12 +59,16 @@ export class LocalStorageProvider implements StorageProviderInterface {
 
   private extension(original: string, mimetype: string): string {
     const fromName = path.extname(original || '').toLowerCase();
-    if (['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.doc', '.docx', '.txt'].includes(fromName)) {
+    if (['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.doc', '.docx', '.txt', '.webm', '.ogg', '.mp4', '.m4a', '.wav', '.aac'].includes(fromName)) {
       return fromName;
     }
     if (mimetype === 'application/pdf') return '.pdf';
     if (mimetype.includes('png')) return '.png';
     if (mimetype.includes('jpeg') || mimetype.includes('jpg')) return '.jpg';
+    if (mimetype.includes('webm')) return '.webm';
+    if (mimetype.includes('ogg')) return '.ogg';
+    if (mimetype.includes('mp4')) return '.mp4';
+    if (mimetype.includes('wav')) return '.wav';
     return '';
   }
 }

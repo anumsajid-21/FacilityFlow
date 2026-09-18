@@ -14,6 +14,14 @@ const ALLOWED_MIME = new Set([
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/plain',
+  // Voice messages (recorded via MediaRecorder in supported browsers).
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-m4a',
+  'audio/aac',
 ]);
 
 /**
@@ -105,6 +113,17 @@ export class FilesService {
     if (owner) {
       const contract = owner.job.contract;
       if (user.hiringOrgId === contract.organizationId || user.providerId === contract.providerId) {
+        return;
+      }
+      throw new ForbiddenException('You do not have access to this file');
+    }
+
+    const voiceMessage = await this.prisma.message.findFirst({
+      where: { audioFileId: fileId },
+      include: { thread: { select: { organizationId: true, providerId: true } } },
+    });
+    if (voiceMessage) {
+      if (user.hiringOrgId === voiceMessage.thread.organizationId || user.providerId === voiceMessage.thread.providerId) {
         return;
       }
       throw new ForbiddenException('You do not have access to this file');

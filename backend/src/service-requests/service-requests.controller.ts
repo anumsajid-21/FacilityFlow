@@ -11,17 +11,32 @@ import {
   ParseUUIDPipe,
   UploadedFiles,
   UseInterceptors,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Throttle } from '../common/decorators/throttle.decorator';
 import { CurrentUser, AuthUser } from '../common/decorators/user.decorator';
 import { ServiceRequestsService } from './service-requests.service';
+import { AiAssistService } from './ai-assist.service';
 import { MatchingService } from '../matching/matching.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+
+class AiAssistDto {
+  @IsString()
+  @MinLength(10, { message: 'Please describe the problem in a bit more detail (at least 10 characters).' })
+  @MaxLength(2000)
+  description: string;
+
+  @IsOptional()
+  @IsObject()
+  answers?: Record<string, string>;
+}
 
 class ServiceRequestDto {
   @IsString() title: string;
@@ -46,12 +61,36 @@ export class ServiceRequestsController {
     private readonly sr: ServiceRequestsService,
     private readonly matching: MatchingService,
     private readonly prisma: PrismaService,
+    private readonly aiAssist: AiAssistService,
   ) {}
 
   /** Service categories for the request-creation dropdown (declared before ':id' routes). */
   @Get('categories')
   async categories() {
     return this.prisma.serviceCategory.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  /** Whether AI Assist is configured — lets the frontend hide the entry point when it isn't. */
+  @Get('ai-assist/status')
+  aiAssistStatus() {
+    return { enabled: this.aiAssist.isEnabled() };
+  }
+
+  /**
+   * Turns a free-text problem description into suggested form fields.
+   * Purely advisory — never creates or modifies a service request itself.
+   */
+  @Post('ai-assist')
+  @Throttle({ limit: 10, ttl: 60 })
+  async aiAssistAnalyze(@Body() dto: AiAssistDto) {
+    try {
+      return await this.aiAssist.analyze(dto.description, dto.answers);
+    } catch (err: any) {
+      if (err?.message === 'AI_NOT_CONFIGURED') {
+        throw new HttpException('AI Assist is not configured.', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      throw new HttpException('AI Assist could not analyze this description. Please fill in the form manually.', HttpStatus.BAD_GATEWAY);
+    }
   }
 
   @Get()

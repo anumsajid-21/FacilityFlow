@@ -117,6 +117,11 @@ export const serviceRequestsApi = {
   submit: async (id: string) => unwrap(await api.post(`/service-requests/${id}/submit`)),
   archive: async (id: string) => unwrap(await api.post(`/service-requests/${id}/archive`)),
   matches: async (id: string) => unwrap<any>(await api.get(`/service-requests/${id}/matches`)),
+  aiAssistStatus: async () => unwrap<{ enabled: boolean }>(await api.get("/service-requests/ai-assist/status")),
+  aiAssist: async (description: string, answers?: Record<string, string>) =>
+    unwrap<{ category: { id: string; name: string } | null; title: string; description: string; priority: string; followUpQuestions: string[] }>(
+      await api.post("/service-requests/ai-assist", { description, answers }),
+    ),
 };
 
 export const quotationsApi = {
@@ -225,7 +230,8 @@ export const messagingApi = {
   threads: async () => unwrap<any>(await api.get("/messages/threads")),
   thread: async (id: string) => unwrap<any>(await api.get(`/messages/threads/${id}`)),
   create: async (data: any) => unwrap<any>(await api.post("/messages/threads", data)),
-  send: async (id: string, body: string) => unwrap<any>(await api.post(`/messages/threads/${id}/messages`, { body })),
+  send: async (id: string, body: string, audio?: { audioFileId: string; audioSeconds: number }) =>
+    unwrap<any>(await api.post(`/messages/threads/${id}/messages`, { body, ...audio })),
 };
 
 export const slaApi = {

@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards, ParseUUIDPipe } from "@nestjs/common";
-import { IsOptional, IsString, IsUUID, MinLength } from "class-validator";
+import { Body, Controller, Get, Param, Post, UseGuards, ParseUUIDPipe, BadRequestException } from "@nestjs/common";
+import { IsInt, IsOptional, IsString, IsUUID, Min, MinLength } from "class-validator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -13,9 +13,13 @@ class CreateThreadDto {
   @IsOptional() @IsUUID() serviceRequestId?: string;
   @IsString() @MinLength(2) subject: string;
   @IsOptional() @IsString() body?: string;
+  @IsOptional() @IsUUID() audioFileId?: string;
+  @IsOptional() @IsInt() @Min(1) audioSeconds?: number;
 }
 class SendMessageDto {
-  @IsString() @MinLength(1) body: string;
+  @IsOptional() @IsString() body?: string;
+  @IsOptional() @IsUUID() audioFileId?: string;
+  @IsOptional() @IsInt() @Min(1) audioSeconds?: number;
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -34,5 +38,10 @@ export class MessagingController {
   get(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) { return this.messages.get(user, id); }
 
   @Post("threads/:id/messages")
-  send(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string, @Body() dto: SendMessageDto) { return this.messages.send(user, id, dto.body); }
+  send(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string, @Body() dto: SendMessageDto) {
+    if (!dto.body?.trim() && !dto.audioFileId) {
+      throw new BadRequestException("A message needs text or a voice recording");
+    }
+    return this.messages.send(user, id, { body: dto.body, audioFileId: dto.audioFileId, audioSeconds: dto.audioSeconds });
+  }
 }

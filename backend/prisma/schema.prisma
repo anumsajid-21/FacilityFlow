@@ -86,6 +86,7 @@ enum FileKind {
   JOB_PHOTO
   SERVICE_REPORT
   SERVICE_REQUEST_ATTACHMENT
+  MESSAGE_AUDIO
   OTHER
 }
 
@@ -827,6 +828,7 @@ model File {
   serviceRequestAttachments ServiceRequestAttachment[]
   beforeProof               ProofOfWork[]              @relation("BeforePhotos")
   afterProof                ProofOfWork[]              @relation("AfterPhotos")
+  voiceMessages             Message[]                  @relation("MessageAudio")
 
   @@index([kind])
 }
@@ -879,15 +881,18 @@ model MessageThread {
 }
 
 model Message {
-  id        String    @id @default(uuid())
-  threadId  String
-  senderId  String
-  body      String
-  createdAt DateTime  @default(now())
-  readAt    DateTime?
+  id           String    @id @default(uuid())
+  threadId     String
+  senderId     String
+  body         String
+  audioFileId  String?
+  audioSeconds Int?
+  createdAt    DateTime  @default(now())
+  readAt       DateTime?
 
-  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  sender User          @relation(fields: [senderId], references: [id])
+  thread    MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender    User          @relation(fields: [senderId], references: [id])
+  audioFile File?         @relation("MessageAudio", fields: [audioFileId], references: [id])
 
   @@index([threadId, createdAt])
   @@index([senderId, readAt])

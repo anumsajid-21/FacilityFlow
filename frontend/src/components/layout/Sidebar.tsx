@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   LayoutDashboard, Building2, FileText, Users, Quote, FileSignature,
   HardHat, ReceiptText, Star, Settings, LogOut, Menu, X, ChevronLeft, UserCheck,
   Bell, Shield, MessageCircle, BarChart3,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import { messagingApi } from "@/services/api";
+import { useUnreadStore } from "@/store/unread";
 import { cn } from "@/lib/utils";
 
 const ALL_NAV = [
@@ -37,15 +37,11 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [unreadMessages, setUnreadMessages] = useState(0);
+  const unreadMessages = useUnreadStore((s) => s.messages);
+  const unreadNotifications = useUnreadStore((s) => s.notifications);
 
   const role = user?.role ?? "HIRING_ORG";
   const nav = ALL_NAV.filter((n) => (n.roles as string[]).includes(role));
-  useEffect(() => {
-    if (role === "HIRING_ORG" || role === "PROVIDER" || role === "ADMIN") {
-      messagingApi.threads().then((result) => setUnreadMessages(Number(result?.unreadCount ?? 0))).catch(() => setUnreadMessages(0));
-    }
-  }, [role]);
 
   const logoutAndGo = () => {
     logout();
@@ -81,7 +77,13 @@ export function Sidebar() {
               title={item.label}
             >
               <Icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-brass" : "text-sand/60 group-hover:text-brass")} />
-              {!isCollapsed && <span className="flex min-w-0 flex-1 items-center justify-between gap-2 truncate"><span className="truncate">{item.label}</span>{item.href === "/messages" && unreadMessages > 0 && <span className="rounded-full bg-terracotta px-1.5 text-[10px] text-ivory">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}</span>}
+              {!isCollapsed && (
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-2 truncate">
+                  <span className="truncate">{item.label}</span>
+                  {item.href === "/messages" && unreadMessages > 0 && <span className="rounded-full bg-terracotta px-1.5 text-[10px] text-ivory">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
+                  {item.href === "/notifications" && unreadNotifications > 0 && <span className="rounded-full bg-terracotta px-1.5 text-[10px] text-ivory">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -128,8 +130,9 @@ export function Sidebar() {
               {unreadMessages > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 text-[10px] font-bold text-ivory">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
             </Link>
           )}
-          <Link href="/notifications" aria-label="Notifications" className="rounded-lg p-1.5 text-ivory hover:bg-ivory/10">
+          <Link href="/notifications" aria-label="Notifications" className="relative rounded-lg p-1.5 text-ivory hover:bg-ivory/10">
             <Bell className="h-5 w-5" />
+            {unreadNotifications > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 text-[10px] font-bold text-ivory">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>}
           </Link>
           <Link href="/settings" aria-label="Settings" className="rounded-lg p-1.5 text-ivory hover:bg-ivory/10">
             <Settings className="h-5 w-5" />

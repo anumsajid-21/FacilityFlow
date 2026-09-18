@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, CheckCheck, ChevronRight, MessageCircle, Settings } from "lucide-react";
-import { notificationsApi, messagingApi } from "@/services/api";
+import { notificationsApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
+import { useUnreadStore } from "@/store/unread";
 import { timeAgo } from "@/lib/utils";
 
 const ROUTE_TITLES: Record<string, string> = {
@@ -34,24 +35,23 @@ export function TopBar() {
   const role = user?.role;
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [msgUnread, setMsgUnread] = useState(0);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const unreadCount = useUnreadStore((s) => s.notifications);
+  const msgUnread = useUnreadStore((s) => s.messages);
 
   const fetchNotifications = async () => {
     try {
       const res = await notificationsApi.list();
       setNotifications(res?.notifications ?? []);
-      setUnreadCount(res?.unreadCount ?? 0);
     } catch {
       // Ignore polling errors
     }
+    void useUnreadStore.getState().refreshNotifications();
   };
 
   useEffect(() => {
     void fetchNotifications();
-    messagingApi.threads().then((r) => setMsgUnread(Number((r as any)?.unreadCount ?? 0))).catch(() => setMsgUnread(0));
     const interval = setInterval(() => void fetchNotifications(), 30000);
     return () => clearInterval(interval);
   }, []);
@@ -71,7 +71,7 @@ export function TopBar() {
     try {
       await notificationsApi.markAllRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
+      await useUnreadStore.getState().refreshNotifications();
     } catch {
       // handle error
     } finally {
@@ -84,7 +84,7 @@ export function TopBar() {
     try {
       await notificationsApi.markRead(id);
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-      setUnreadCount((c) => Math.max(0, c - 1));
+      await useUnreadStore.getState().refreshNotifications();
     } catch {
       // handle error
     }
